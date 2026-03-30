@@ -18,20 +18,21 @@ service cloud.firestore {
     function isOwnerCliente(expData) {
       return isCliente() && expData.clienteId == request.auth.uid;
     }
+    // Bootstrap: usuario autenticado puede crear su propio doc solo si no existe aún
+    function canBootstrap(uid) {
+      return isLoggedIn() && request.auth.uid == uid &&
+             !exists(/databases/$(database)/documents/usuarios/$(uid));
+    }
 
     // ── Usuarios ──────────────────────────────────────────────
-    // Cada usuario puede leer su propio perfil
-    // Solo profesionales pueden crear/editar/eliminar usuarios
     match /usuarios/{uid} {
-      allow read: if isLoggedIn() && (request.auth.uid == uid || isProfesional());
-      allow create: if isProfesional();
+      allow read:   if isLoggedIn() && (request.auth.uid == uid || isProfesional());
+      allow create: if isProfesional() || canBootstrap(uid);
       allow update: if isProfesional() || request.auth.uid == uid;
       allow delete: if isProfesional();
     }
 
     // ── Expedientes ───────────────────────────────────────────
-    // Profesional: acceso total
-    // Cliente: solo lee sus propios expedientes (clienteId == su uid)
     match /expedientes/{expId} {
       allow read:   if isProfesional() || isOwnerCliente(resource.data);
       allow create: if isProfesional();
