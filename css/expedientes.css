@@ -1,0 +1,19 @@
+/* Expedientes */
+.exp-filters { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:1.25rem; }
+.exp-filters input,.exp-filters select { padding:8px 12px; border:1.5px solid var(--border); border-radius:var(--radius); font-size:14px; background:var(--surface); }
+.exp-filters input { min-width:200px; }
+.exp-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1.25rem; margin-bottom:12px; box-shadow:var(--shadow); transition:box-shadow var(--transition); }
+.exp-card:hover { box-shadow:var(--shadow-md); }
+.exp-card-title { font-weight:600; font-size:15px; margin-bottom:5px; color:var(--text); }
+.exp-card-meta { font-size:13px; color:var(--text-muted); }
+.exp-card-footer { display:flex; justify-content:space-between; align-items:center; margin-top:14px; }
+.exp-detail-header { margin-bottom:1.5rem; }
+.exp-detail-header h2 { margin-bottom:6px; }
+.exp-meta { display:flex; flex-wrap:wrap; gap:18px; font-size:14px; color:var(--text-muted); margin:0.75rem 0; }
+.exp-meta span strong { color:var(--text); }
+.actuaciones-list { }
+.act-item { padding:12px 0; border-bottom:1px solid var(--border-lt); }
+.act-item:last-child { border-bottom:none; }
+.act-texto { font-size:14px; line-height:1.6; }
+.act-fecha { font-size:12px; color:var(--text-light); margin-top:3px; }
+.nueva-act textarea { min-height:80px; }
