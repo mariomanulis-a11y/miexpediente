@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Panel — Mi Expediente</title>
+  <link rel="stylesheet" href="../../css/main.css">
+  <link rel="stylesheet" href="../../css/dashboard.css">
+  <link rel="stylesheet" href="../../css/mobile.css">
+</head>
+<body>
+  <nav class="topnav">
+    <span class="nav-brand">Mi Expediente</span>
+    <div class="nav-actions">
+      <span id="nav-user" class="nav-user"></span>
+      <button class="btn-link" onclick="Auth.logout()">Salir</button>
+    </div>
+  </nav>
+
+  <aside class="sidebar">
+    <div class="sidebar-brand">Panel profesional</div>
+    <ul class="sidebar-nav">
+      <li class="active"><a href="dashboard.html">🏠 Inicio</a></li>
+      <li><a href="expedientes.html">📁 Expedientes</a></li>
+      <li><a href="clientes.html">👥 Clientes</a></li>
+      <li><a href="solicitudes.html">📨 Solicitudes <span id="badge-sol" class="badge badge-num" hidden></span></a></li>
+      <li><a href="perfil.html">⚙️ Configuración</a></li>
+    </ul>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h2>Bienvenido/a, <span id="user-name">—</span></h2>
+        <p style="color:var(--text-muted);font-size:14px;" id="fecha-hoy"></p>
+      </div>
+      <button class="btn-primary" onclick="location.href='expedientes.html'">+ Nuevo expediente</button>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <p class="stat-label">Expedientes activos</p>
+        <p class="stat-value" id="s-activos">—</p>
+      </div>
+      <div class="stat-card">
+        <p class="stat-label">Clientes</p>
+        <p class="stat-value" id="s-clientes">—</p>
+      </div>
+      <div class="stat-card" id="sc-sol">
+        <p class="stat-label">Solicitudes pendientes</p>
+        <p class="stat-value" id="s-sol">—</p>
+      </div>
+      <div class="stat-card" id="sc-venc">
+        <p class="stat-label">Vencimientos (7 días)</p>
+        <p class="stat-value" id="s-venc">—</p>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:1.5rem;" class="two-cols">
+      <div class="card">
+        <h3 style="margin-bottom:1rem">Últimas actuaciones</h3>
+        <div id="actividad-list"></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:1rem">Próximos vencimientos</h3>
+        <div id="venc-list"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Bottom nav mobile -->
+  <nav class="bottom-nav">
+    <a href="dashboard.html" class="active"><span class="nav-icon">🏠</span>Inicio</a>
+    <a href="expedientes.html"><span class="nav-icon">📁</span>Causas</a>
+    <a href="clientes.html"><span class="nav-icon">👥</span>Clientes</a>
+    <a href="solicitudes.html"><span class="nav-icon">📨</span>Solicitudes</a>
+    <a href="perfil.html"><span class="nav-icon">⚙️</span>Config</a>
+  </nav>
+
+  <script src="../../js/utils.js"></script>
+  <script src="../../js/storage.js"></script>
+  <script src="../../config/config.js"></script>
+  <script src="../../config/roles.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/modules.js"></script>
+  <script src="../../js/expedientes.js"></script>
+  <script src="../../js/app.js"></script>
+  <script>
+    const sess = Auth.requireRole('admin');
+    document.getElementById('user-name').textContent = sess.nombre;
+    document.getElementById('nav-user').textContent = sess.nombre;
+    document.getElementById('fecha-hoy').textContent =
+      new Date().toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+    const exps  = Expedientes.getAll();
+    const clis  = Clientes.getAll();
+    const sols  = Solicitudes.getPendientes();
+    const vencs = Expedientes.proximosVencimientos(7);
+
+    document.getElementById('s-activos').textContent  = exps.filter(e => e.estado === 'activo').length;
+    document.getElementById('s-clientes').textContent = clis.length;
+    document.getElementById('s-sol').textContent      = sols.length;
+    document.getElementById('s-venc').textContent     = vencs.length;
+
+    if (sols.length > 0) {
+      document.getElementById('badge-sol').textContent = sols.length;
+      document.getElementById('badge-sol').hidden = false;
+      document.getElementById('sc-sol').classList.add('warn');
+    }
+    if (vencs.length > 0) document.getElementById('sc-venc').classList.add('warn');
+
+    // Actividad reciente
+    const actividad = Storage.get('actividad') || [];
+    const al = document.getElementById('actividad-list');
+    if (!actividad.length) { al.innerHTML = '<p class="empty-state" style="padding:1rem 0">Sin actividad reciente.</p>'; }
+    else {
+      al.innerHTML = actividad.slice(0,6).map(a =>
+        `<div class="activity-item"><span class="act-time">${Utils.formatDateTime(a.fecha)}</span><span>${Utils.sanitize(a.texto)}</span></div>`
+      ).join('');
+    }
+
+    // Próximos vencimientos
+    const vl = document.getElementById('venc-list');
+    if (!vencs.length) { vl.innerHTML = '<p class="empty-state" style="padding:1rem 0">Sin vencimientos próximos.</p>'; }
+    else {
+      vl.innerHTML = vencs.slice(0,5).map(e => {
+        const dias = Utils.daysUntil(e.proximoVencimiento);
+        const cls  = dias <= 2 ? 'venc-crit' : dias <= 5 ? 'venc-warn' : 'venc-ok';
+        return `<div class="venc-item">
+          <div>
+            <div style="font-weight:500;font-size:14px">${Utils.sanitize(Utils.truncate(e.caratula,45))}</div>
+            <div style="font-size:12px;color:var(--text-muted)">${Utils.formatDate(e.proximoVencimiento)}</div>
+          </div>
+          <span class="venc-dias ${cls}">${dias}d</span>
+        </div>`;
+      }).join('');
+    }
+  </script>
+  <style>
+    @media(max-width:768px){ .two-cols{ grid-template-columns:1fr!important; } }
+  </style>
+</body>
+</html>
