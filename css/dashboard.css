@@ -1,0 +1,17 @@
+/* Dashboard */
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:16px; margin-bottom:2rem; }
+.stat-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:1.3rem; box-shadow:var(--shadow); }
+.stat-label { font-size:12px; color:var(--text-muted); margin-bottom:6px; font-weight:500; }
+.stat-value { font-size:2rem; font-weight:700; color:var(--primary); line-height:1; }
+.stat-sub   { font-size:12px; color:var(--text-muted); margin-top:4px; }
+.stat-card.warn .stat-value { color:var(--warning); }
+.stat-card.danger .stat-value { color:var(--danger); }
+.activity-list { }
+.activity-item { display:flex; gap:14px; padding:11px 0; border-bottom:1px solid var(--border-lt); font-size:14px; }
+.activity-item:last-child { border-bottom:none; }
+.act-time { font-size:12px; color:var(--text-muted); white-space:nowrap; min-width:95px; padding-top:1px; }
+.venc-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border-lt); font-size:14px; }
+.venc-dias { font-weight:600; font-size:13px; }
+.venc-ok   { color:var(--success); }
+.venc-warn { color:var(--warning); }
+.venc-crit { color:var(--danger); }
