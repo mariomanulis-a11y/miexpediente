@@ -1,0 +1,21 @@
+/* Mobile responsive */
+@media (max-width:768px) {
+  .sidebar { display:none; }
+  .main-content { margin-left:0; padding:1rem 1rem 90px; }
+  .bottom-nav { display:flex; }
+  .stats-grid { grid-template-columns:repeat(2,1fr); gap:10px; }
+  .table { display:none; }
+  .mobile-cards { display:block; }
+  h1 { font-size:1.35rem; } h2 { font-size:1.15rem; }
+  .page-header { margin-bottom:1.25rem; }
+  .modal { margin:0; border-radius:var(--radius-lg) var(--radius-lg) 0 0; position:fixed; bottom:0; left:0; right:0; max-height:85vh; }
+  .toast { bottom:80px; right:1rem; left:1rem; max-width:none; }
+}
+@media (min-width:769px) {
+  .mobile-cards { display:none; }
+  .bottom-nav { display:none !important; }
+}
+@media (max-width:480px) {
+  .auth-card { padding:1.5rem 1.25rem; }
+  .stats-grid { grid-template-columns:1fr 1fr; }
+}
