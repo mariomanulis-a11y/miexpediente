@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Detalle — Mi Expediente</title>
+  <link rel="stylesheet" href="../../css/main.css">
+  <link rel="stylesheet" href="../../css/expedientes.css">
+  <link rel="stylesheet" href="../../css/components.css">
+  <link rel="stylesheet" href="../../css/mobile.css">
+</head>
+<body>
+  <nav class="topnav">
+    <span class="nav-brand">Mi Expediente</span>
+    <div class="nav-actions">
+      <button class="btn-link" onclick="history.back()">← Volver</button>
+      <button class="btn-link" onclick="Auth.logout()">Salir</button>
+    </div>
+  </nav>
+  <aside class="sidebar">
+    <ul class="sidebar-nav">
+      <li><a href="dashboard.html">🏠 Inicio</a></li>
+      <li class="active"><a href="expedientes.html">📁 Expedientes</a></li>
+      <li><a href="clientes.html">👥 Clientes</a></li>
+      <li><a href="solicitudes.html">📨 Solicitudes</a></li>
+      <li><a href="perfil.html">⚙️ Configuración</a></li>
+    </ul>
+  </aside>
+  <main class="main-content">
+    <div id="contenido">Cargando...</div>
+  </main>
+
+  <script src="../../js/utils.js"></script>
+  <script src="../../js/storage.js"></script>
+  <script src="../../config/config.js"></script>
+  <script src="../../config/roles.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/modules.js"></script>
+  <script src="../../js/expedientes.js"></script>
+  <script src="../../js/app.js"></script>
+  <script>
+    Auth.requireRole('admin');
+    const params = new URLSearchParams(location.search);
+    const expId  = params.get('id');
+    const exp    = Expedientes.getById(expId);
+    const div    = document.getElementById('contenido');
+
+    if (!exp) {
+      div.innerHTML = '<div class="alert alert-danger">Expediente no encontrado. <a href="expedientes.html">Volver</a></div>';
+    } else {
+      const cli = Clientes.getById(exp.clienteId);
+      function render() {
+        const e = Expedientes.getById(expId);
+        div.innerHTML = `
+          <div class="exp-detail-header">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+              <div>
+                <h2>${Utils.sanitize(e.caratula)}</h2>
+                <div style="margin-top:6px">${UI.estadoBadge(e.estado)}</div>
+              </div>
+              <div class="actions">
+                <button class="btn-secondary btn-sm" onclick="location.href='expedientes.html'">← Lista</button>
+                ${cli ? `<button class="wa-btn" style="font-size:13px;padding:8px 14px" onclick="WhatsApp.notificarActualizacion(Clientes.getById('${cli.id}'),'${Utils.sanitize(e.caratula).replace(/'/g,'\\'')}')">📲 Notificar</button>` : ''}
+              </div>
+            </div>
+            <div class="exp-meta">
+              <span><strong>Nro:</strong> ${Utils.sanitize(e.numero||'—')}</span>
+              <span><strong>Fuero:</strong> ${Utils.sanitize(e.fuero||'—')}</span>
+              <span><strong>Juzgado:</strong> ${Utils.sanitize(e.juzgado||'—')}</span>
+              <span><strong>Cliente:</strong> ${cli ? Utils.sanitize(cli.nombre) : '—'}</span>
+              <span><strong>Vencimiento:</strong> ${Utils.formatDate(e.proximoVencimiento)}</span>
+              <span><strong>Actualizado:</strong> ${Utils.formatDateTime(e.actualizadoEn)}</span>
+            </div>
+            ${e.descripcion ? `<div class="card" style="font-size:14px;line-height:1.7;margin-top:1rem">${Utils.sanitize(e.descripcion)}</div>` : ''}
+          </div>
+
+          <div class="card" style="margin-top:1.5rem">
+            <h3 style="margin-bottom:1rem">Cargar nueva actuación</h3>
+            <div class="nueva-act">
+              <div class="field">
+                <textarea id="nueva-act-txt" placeholder="Describí la actuación, resolución, notificación..."></textarea>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                <button class="btn-primary" onclick="cargarActuacion()">Agregar actuación</button>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-muted)">
+                  <input type="date" id="venc-nuevo" style="font-size:13px;padding:6px 10px;border:1.5px solid var(--border);border-radius:var(--radius)">
+                  Actualizar vencimiento
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:1.5rem">
+            <h3 style="margin-bottom:1rem">Historial de actuaciones</h3>
+            <div class="actuaciones-list">
+              ${(e.actuaciones||[]).length ? (e.actuaciones||[]).map(a => `
+                <div class="act-item">
+                  <div class="act-texto">${Utils.sanitize(a.texto)}</div>
+                  <div class="act-fecha">${Utils.formatDateTime(a.fecha)}</div>
+                </div>`).join('') : '<p style="color:var(--text-muted);font-size:14px">Sin actuaciones cargadas.</p>'}
+            </div>
+          </div>`;
+      }
+
+      function cargarActuacion() {
+        const txt  = document.getElementById('nueva-act-txt').value.trim();
+        const venc = document.getElementById('venc-nuevo')?.value;
+        if (!txt) { UI.toast('Escribí el texto de la actuación.', 'danger'); return; }
+        Expedientes.agregarActuacion(expId, txt);
+        if (venc) Expedientes.actualizar(expId, { proximoVencimiento: venc });
+        UI.toast('Actuación cargada correctamente.', 'success');
+        render();
+      }
+
+      render();
+    }
+  </script>
+</body>
+</html>
