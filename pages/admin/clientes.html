@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Clientes — Mi Expediente</title>
+  <link rel="stylesheet" href="../../css/main.css">
+  <link rel="stylesheet" href="../../css/components.css">
+  <link rel="stylesheet" href="../../css/mobile.css">
+</head>
+<body>
+  <nav class="topnav">
+    <span class="nav-brand">Mi Expediente</span>
+    <div class="nav-actions">
+      <span id="nav-user" class="nav-user"></span>
+      <button class="btn-link" onclick="Auth.logout()">Salir</button>
+    </div>
+  </nav>
+  <aside class="sidebar">
+    <ul class="sidebar-nav">
+      <li><a href="dashboard.html">🏠 Inicio</a></li>
+      <li><a href="expedientes.html">📁 Expedientes</a></li>
+      <li class="active"><a href="clientes.html">👥 Clientes</a></li>
+      <li><a href="solicitudes.html">📨 Solicitudes</a></li>
+      <li><a href="perfil.html">⚙️ Configuración</a></li>
+    </ul>
+  </aside>
+  <main class="main-content">
+    <div class="page-header">
+      <h2>Clientes</h2>
+      <button class="btn-primary" onclick="abrirModal()">+ Nuevo cliente</button>
+    </div>
+    <div style="margin-bottom:1.25rem">
+      <input type="text" id="q" placeholder="Buscar por nombre o email..." oninput="render()"
+        style="padding:9px 14px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;width:100%;max-width:340px">
+    </div>
+    <div id="lista"></div>
+  </main>
+
+  <nav class="bottom-nav">
+    <a href="dashboard.html"><span class="nav-icon">🏠</span>Inicio</a>
+    <a href="expedientes.html"><span class="nav-icon">📁</span>Causas</a>
+    <a href="clientes.html" class="active"><span class="nav-icon">👥</span>Clientes</a>
+    <a href="solicitudes.html"><span class="nav-icon">📨</span>Solicitudes</a>
+    <a href="perfil.html"><span class="nav-icon">⚙️</span>Config</a>
+  </nav>
+
+  <div id="modal" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-titulo">Nuevo cliente</h3>
+        <button class="modal-close" onclick="cerrar()">×</button>
+      </div>
+      <div class="field"><label>Nombre completo *</label><input id="m-nombre" type="text" required></div>
+      <div class="field"><label>Email *</label><input id="m-email" type="email" required></div>
+      <div class="field">
+        <label>Contraseña de acceso *</label>
+        <input id="m-pw" type="text" placeholder="Mínimo 6 caracteres">
+        <p class="hint">El cliente usará esta contraseña para ingresar. Se la enviás por WhatsApp.</p>
+      </div>
+      <div class="field"><label>WhatsApp (con cód. país, ej: 5491123456789)</label><input id="m-wa" type="tel"></div>
+      <div class="field"><label>DNI</label><input id="m-dni" type="text"></div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="cerrar()">Cancelar</button>
+        <button class="btn-primary" onclick="guardar()">Guardar cliente</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal credenciales -->
+  <div id="modal-cred" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Credenciales del cliente</h3>
+        <button class="modal-close" onclick="document.getElementById('modal-cred').style.display='none'">×</button>
+      </div>
+      <div class="alert alert-info" style="margin-bottom:1rem">
+        El cliente fue creado. Enviá estas credenciales por WhatsApp.
+      </div>
+      <div class="info-row"><span class="info-label">Email</span><strong id="cred-email"></strong></div>
+      <div class="info-row"><span class="info-label">Contraseña</span><strong id="cred-pw" style="font-family:var(--font-mono)"></strong></div>
+      <div class="info-row"><span class="info-label">Acceso</span><small id="cred-url" style="word-break:break-all"></small></div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="document.getElementById('modal-cred').style.display='none'">Cerrar</button>
+        <button class="wa-btn" id="btn-wa-cred">📲 Enviar por WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../js/utils.js"></script>
+  <script src="../../js/storage.js"></script>
+  <script src="../../config/config.js"></script>
+  <script src="../../config/roles.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/modules.js"></script>
+  <script src="../../js/expedientes.js"></script>
+  <script src="../../js/app.js"></script>
+  <script>
+    Auth.requireRole('admin');
+    UI.setUser(Auth.getSession().nombre);
+    let editId = null;
+
+    function render() {
+      const q = document.getElementById('q').value.toLowerCase();
+      const clis = Clientes.getAll().filter(c =>
+        !q || c.nombre.toLowerCase().includes(q) || c.email.toLowerCase().includes(q)
+      );
+      const div = document.getElementById('lista');
+      if (!clis.length) { UI.empty(div, 'No hay clientes registrados.'); return; }
+
+      div.innerHTML = `
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Nombre</th><th>Email</th><th>WhatsApp</th><th>Estado</th><th>Expedientes</th><th>Acciones</th></tr></thead>
+            <tbody>${clis.map(c => {
+              const exps = Expedientes.getAll().filter(e => e.clienteId === c.id);
+              return `<tr>
+                <td style="font-weight:500">${Utils.sanitize(c.nombre)}</td>
+                <td style="font-size:13px">${Utils.sanitize(c.email)}</td>
+                <td style="font-size:13px">${c.whatsapp ? `<a href="https://wa.me/${c.whatsapp}" target="_blank">+${c.whatsapp}</a>` : '—'}</td>
+                <td>${c.activo ? '<span class="badge badge-success">Activo</span>' : '<span class="badge badge-secondary">Inactivo</span>'}</td>
+                <td>${exps.length}</td>
+                <td class="actions">
+                  <button class="btn-secondary btn-sm" onclick="editar('${c.id}')">Editar</button>
+                  ${c.activo
+                    ? `<button class="btn-danger btn-sm" onclick="toggleActivo('${c.id}',false)">Desactivar</button>`
+                    : `<button class="btn-success btn-sm" onclick="toggleActivo('${c.id}',true)">Activar</button>`}
+                </td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+        <div class="mobile-cards">
+          ${clis.map(c => `<div class="exp-card">
+            <div class="exp-card-title">${Utils.sanitize(c.nombre)}</div>
+            <div class="exp-card-meta">${c.email}${c.whatsapp ? ' · +'+c.whatsapp : ''}</div>
+            <div class="exp-card-footer">
+              ${c.activo ? '<span class="badge badge-success">Activo</span>' : '<span class="badge badge-secondary">Inactivo</span>'}
+              <button class="btn-secondary btn-sm" onclick="editar('${c.id}')">Editar</button>
+            </div>
+          </div>`).join('')}
+        </div>`;
+    }
+
+    function abrirModal(id) {
+      editId = id || null;
+      if (editId) {
+        const c = Clientes.getById(editId);
+        document.getElementById('modal-titulo').textContent = 'Editar cliente';
+        document.getElementById('m-nombre').value = c.nombre;
+        document.getElementById('m-email').value  = c.email;
+        document.getElementById('m-pw').value     = c.password;
+        document.getElementById('m-wa').value     = c.whatsapp || '';
+        document.getElementById('m-dni').value    = c.dni || '';
+      } else {
+        document.getElementById('modal-titulo').textContent = 'Nuevo cliente';
+        ['m-nombre','m-email','m-pw','m-wa','m-dni'].forEach(i => document.getElementById(i).value = '');
+        // Sugerir contraseña aleatoria
+        document.getElementById('m-pw').value = Math.random().toString(36).slice(-8).toUpperCase();
+      }
+      document.getElementById('modal').style.display = 'flex';
+    }
+
+    function guardar() {
+      const nombre = document.getElementById('m-nombre').value.trim();
+      const email  = document.getElementById('m-email').value.trim();
+      const pw     = document.getElementById('m-pw').value.trim();
+      if (!nombre || !email || !pw) { UI.toast('Nombre, email y contraseña son obligatorios.', 'danger'); return; }
+      if (editId) {
+        Clientes.actualizar(editId, { nombre, email, password: pw,
+          whatsapp: document.getElementById('m-wa').value.replace(/\D/g,''),
+          dni: document.getElementById('m-dni').value.trim() });
+        UI.toast('Cliente actualizado.', 'success');
+        cerrar(); render();
+      } else {
+        const result = Clientes.crear({ nombre, email, password: pw,
+          whatsapp: document.getElementById('m-wa').value.replace(/\D/g,''),
+          dni: document.getElementById('m-dni').value.trim() });
+        if (!result.ok) { UI.toast(result.message, 'danger'); return; }
+        cerrar();
+        // Mostrar credenciales
+        document.getElementById('cred-email').textContent = email;
+        document.getElementById('cred-pw').textContent    = pw;
+        document.getElementById('cred-url').textContent   = APP_CONFIG.appUrl;
+        document.getElementById('btn-wa-cred').onclick    = () => WhatsApp.enviarCredenciales(result.cliente, pw);
+        document.getElementById('modal-cred').style.display = 'flex';
+        render();
+      }
+    }
+
+    function editar(id) { abrirModal(id); }
+    function cerrar() { document.getElementById('modal').style.display = 'none'; }
+    function toggleActivo(id, activo) {
+      const c = Clientes.getById(id);
+      if (!UI.confirm(`¿${activo?'Activar':'Desactivar'} a ${c.nombre}?`)) return;
+      activo ? Clientes.activar(id) : Clientes.desactivar(id);
+      UI.toast(`Cliente ${activo?'activado':'desactivado'}.`);
+      render();
+    }
+
+    render();
+  </script>
+</body>
+</html>
