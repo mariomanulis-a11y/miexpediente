@@ -21,22 +21,28 @@ const Auth = {
 };
 
 Auth.onAuthChange(async function(user) {
-  if (user) {
-    const profile = await Auth.loadProfile(user.uid);
-    if (profile) {
-      Store.setUser(profile);
-      const route = Router.current();
-      if (!route || route === 'login' || route === 'solicitar-acceso') {
-        Router.go('dashboard');
+  try {
+    if (user) {
+      const profile = await Auth.loadProfile(user.uid);
+      if (profile) {
+        Store.setUser(profile);
+        const route = Router.current();
+        if (!route || route === 'login' || route === 'solicitar-acceso') {
+          Router.go('dashboard');
+        }
+      } else {
+        await auth.signOut();
+        Router.go('login');
       }
     } else {
-      await auth.signOut();
-      Router.go('login');
+      Store.clear();
+      if (Router.current() !== 'solicitar-acceso') Router.go('login');
     }
-  } else {
-    Store.clear();
-    if (Router.current() !== 'solicitar-acceso') Router.go('login');
+  } catch (e) {
+    console.error('[Auth] Error en onAuthStateChanged:', e);
+    Router.go('login');
+  } finally {
+    const loading = document.getElementById('loading-screen');
+    if (loading) loading.style.display = 'none';
   }
-  const loading = document.getElementById('loading-screen');
-  if (loading) loading.style.display = 'none';
 });

@@ -689,5 +689,14 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(function() {});
 }
 
+// Timeout de seguridad: oculta el loading-screen si Firebase no responde en 5s
+setTimeout(function() {
+  var loading = document.getElementById('loading-screen');
+  if (loading && loading.style.display !== 'none') {
+    loading.style.display = 'none';
+    console.warn('[App] Timeout de seguridad: loading-screen ocultado tras 5s sin respuesta de Firebase.');
+  }
+}, 5000);
+
 // Iniciar router
 Router.init();

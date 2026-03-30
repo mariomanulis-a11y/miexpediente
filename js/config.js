@@ -26,11 +26,16 @@ const APP_CONFIG = {
 };
 
 // ── Inicialización Firebase (compat SDK) ──────────────────────
-try {
-  firebase.initializeApp(FIREBASE_CONFIG);
-  window.db   = firebase.firestore();
-  window.auth = firebase.auth();
-  window.auth.useDeviceLanguage();
-} catch (e) {
-  console.error('[Config] Error Firebase:', e);
+if (typeof firebase === 'undefined') {
+  console.error('[Config] Firebase SDK no cargó. Verificá la conexión a internet o el CDN.');
+} else {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    window.db   = firebase.firestore();
+    window.auth = firebase.auth();
+    window.auth.useDeviceLanguage();
+    console.log('[Config] Firebase inicializado correctamente.');
+  } catch (e) {
+    console.error('[Config] Error al inicializar Firebase:', e);
+  }
 }
