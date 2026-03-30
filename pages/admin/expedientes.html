@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Expedientes — Mi Expediente</title>
+  <link rel="stylesheet" href="../../css/main.css">
+  <link rel="stylesheet" href="../../css/expedientes.css">
+  <link rel="stylesheet" href="../../css/components.css">
+  <link rel="stylesheet" href="../../css/mobile.css">
+</head>
+<body>
+  <nav class="topnav">
+    <span class="nav-brand">Mi Expediente</span>
+    <div class="nav-actions">
+      <span id="nav-user" class="nav-user"></span>
+      <button class="btn-link" onclick="Auth.logout()">Salir</button>
+    </div>
+  </nav>
+  <aside class="sidebar">
+    <ul class="sidebar-nav">
+      <li><a href="dashboard.html">🏠 Inicio</a></li>
+      <li class="active"><a href="expedientes.html">📁 Expedientes</a></li>
+      <li><a href="clientes.html">👥 Clientes</a></li>
+      <li><a href="solicitudes.html">📨 Solicitudes</a></li>
+      <li><a href="perfil.html">⚙️ Configuración</a></li>
+    </ul>
+  </aside>
+  <main class="main-content">
+    <div class="page-header">
+      <h2>Expedientes</h2>
+      <button class="btn-primary" onclick="abrirModal()">+ Nuevo expediente</button>
+    </div>
+    <div class="exp-filters">
+      <input type="text" id="q" placeholder="Buscar carátula, número..." oninput="render()">
+      <select id="fest" onchange="render()">
+        <option value="">Todos los estados</option>
+        <option value="activo">Activo</option>
+        <option value="archivado">Archivado</option>
+        <option value="ganado">Ganado</option>
+        <option value="perdido">Perdido</option>
+        <option value="suspendido">Suspendido</option>
+      </select>
+      <select id="fcli" onchange="render()"><option value="">Todos los clientes</option></select>
+    </div>
+    <div id="resultado"></div>
+  </main>
+
+  <nav class="bottom-nav">
+    <a href="dashboard.html"><span class="nav-icon">🏠</span>Inicio</a>
+    <a href="expedientes.html" class="active"><span class="nav-icon">📁</span>Causas</a>
+    <a href="clientes.html"><span class="nav-icon">👥</span>Clientes</a>
+    <a href="solicitudes.html"><span class="nav-icon">📨</span>Solicitudes</a>
+    <a href="perfil.html"><span class="nav-icon">⚙️</span>Config</a>
+  </nav>
+
+  <!-- Modal nuevo / editar expediente -->
+  <div id="modal" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-titulo">Nuevo expediente</h3>
+        <button class="modal-close" onclick="cerrar()">×</button>
+      </div>
+      <div class="field"><label>Carátula *</label><input id="m-car" type="text" required></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label>Número de expediente</label><input id="m-num" type="text" placeholder="12345/2024"></div>
+        <div class="field"><label>Fuero</label>
+          <select id="m-fuero">
+            <option value="">— Seleccionar —</option>
+            <option>Laboral</option><option>Civil</option><option>Comercial</option>
+            <option>Penal</option><option>Familia</option><option>Contencioso adm.</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>Cliente *</label><select id="m-cli"></select></div>
+      <div class="field"><label>Juzgado / Tribunal</label><input id="m-juz" type="text"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label>Estado</label>
+          <select id="m-est">
+            <option value="activo">Activo</option><option value="archivado">Archivado</option>
+            <option value="ganado">Ganado</option><option value="perdido">Perdido</option>
+            <option value="suspendido">Suspendido</option>
+          </select>
+        </div>
+        <div class="field"><label>Próximo vencimiento</label><input id="m-venc" type="date"></div>
+      </div>
+      <div class="field"><label>Última actuación / descripción</label><textarea id="m-desc" rows="3"></textarea></div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="cerrar()">Cancelar</button>
+        <button class="btn-primary" onclick="guardar()">Guardar expediente</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../js/utils.js"></script>
+  <script src="../../js/storage.js"></script>
+  <script src="../../config/config.js"></script>
+  <script src="../../config/roles.js"></script>
+  <script src="../../js/auth.js"></script>
+  <script src="../../js/modules.js"></script>
+  <script src="../../js/expedientes.js"></script>
+  <script src="../../js/app.js"></script>
+  <script>
+    Auth.requireRole('admin');
+    UI.setUser(Auth.getSession().nombre);
+    let editId = null;
+
+    // Poblar filtro de clientes
+    function poblarFiltros() {
+      const sel = document.getElementById('fcli');
+      Clientes.getAll().forEach(c => {
+        const o = document.createElement('option');
+        o.value = c.id; o.textContent = c.nombre; sel.appendChild(o);
+      });
+    }
+
+    function render() {
+      const q   = document.getElementById('q').value.toLowerCase();
+      const est = document.getElementById('fest').value;
+      const cli = document.getElementById('fcli').value;
+      let exps = Expedientes.getAll().filter(e => {
+        const mQ   = !q   || e.caratula.toLowerCase().includes(q) || (e.numero||'').toLowerCase().includes(q);
+        const mEst = !est || e.estado === est;
+        const mCli = !cli || e.clienteId === cli;
+        return mQ && mEst && mCli;
+      }).sort((a,b) => new Date(b.actualizadoEn) - new Date(a.actualizadoEn));
+
+      const div = document.getElementById('resultado');
+      if (!exps.length) { UI.empty(div, 'No hay expedientes que coincidan.'); return; }
+
+      // Desktop: tabla
+      div.innerHTML = `
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Nro</th><th>Carátula</th><th>Cliente</th><th>Fuero</th><th>Estado</th><th>Vencimiento</th><th>Acciones</th></tr></thead>
+            <tbody>${exps.map(e => {
+              const c = Clientes.getById(e.clienteId);
+              const dias = Utils.daysUntil(e.proximoVencimiento);
+              const vcls = dias !== null && dias <= 3 ? 'color:var(--danger);font-weight:600' : dias <= 7 ? 'color:var(--warning);font-weight:600' : '';
+              return `<tr>
+                <td><code style="font-size:12px">${Utils.sanitize(e.numero||'—')}</code></td>
+                <td><a href="expediente-detalle.html?id=${e.id}" style="font-weight:500">${Utils.sanitize(Utils.truncate(e.caratula,50))}</a></td>
+                <td>${c ? Utils.sanitize(c.nombre) : '—'}</td>
+                <td>${Utils.sanitize(e.fuero||'—')}</td>
+                <td>${UI.estadoBadge(e.estado)}</td>
+                <td style="${vcls}">${Utils.formatDate(e.proximoVencimiento)}</td>
+                <td class="actions">
+                  <button class="btn-secondary btn-sm" onclick="editar('${e.id}')">Editar</button>
+                  <a href="expediente-detalle.html?id=${e.id}" class="btn-primary btn-sm">Ver</a>
+                  <button class="btn-danger btn-sm" onclick="eliminar('${e.id}')">✕</button>
+                </td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+        <div class="mobile-cards">
+          ${exps.map(e => {
+            const c = Clientes.getById(e.clienteId);
+            return `<div class="exp-card">
+              <div class="exp-card-title"><a href="expediente-detalle.html?id=${e.id}">${Utils.sanitize(e.caratula)}</a></div>
+              <div class="exp-card-meta">${c ? c.nombre : '—'} · ${e.juzgado||''}</div>
+              <div class="exp-card-footer">
+                ${UI.estadoBadge(e.estado)}
+                <div class="actions">
+                  <button class="btn-secondary btn-sm" onclick="editar('${e.id}')">Editar</button>
+                  <a href="expediente-detalle.html?id=${e.id}" class="btn-primary btn-sm">Ver</a>
+                </div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    function abrirModal(id) {
+      editId = id || null;
+      if (editId) {
+        const e = Expedientes.getById(editId);
+        document.getElementById('modal-titulo').textContent = 'Editar expediente';
+        document.getElementById('m-car').value  = e.caratula;
+        document.getElementById('m-num').value  = e.numero || '';
+        document.getElementById('m-juz').value  = e.juzgado || '';
+        document.getElementById('m-fuero').value = e.fuero || '';
+        document.getElementById('m-est').value  = e.estado;
+        document.getElementById('m-venc').value = e.proximoVencimiento ? e.proximoVencimiento.slice(0,10) : '';
+        document.getElementById('m-desc').value = e.descripcion || e.ultimaActuacion || '';
+        cargarSelectClientes(e.clienteId);
+      } else {
+        document.getElementById('modal-titulo').textContent = 'Nuevo expediente';
+        ['m-car','m-num','m-juz','m-desc','m-venc'].forEach(i => document.getElementById(i).value = '');
+        document.getElementById('m-fuero').value = '';
+        document.getElementById('m-est').value  = 'activo';
+        cargarSelectClientes();
+      }
+      document.getElementById('modal').style.display = 'flex';
+    }
+
+    function cargarSelectClientes(selId) {
+      const s = document.getElementById('m-cli');
+      const clis = Clientes.getAll().filter(c => c.activo);
+      s.innerHTML = '<option value="">— Seleccionar cliente —</option>' +
+        clis.map(c => `<option value="${c.id}"${c.id===selId?' selected':''}>${Utils.sanitize(c.nombre)}</option>`).join('');
+    }
+
+    function guardar() {
+      const car = document.getElementById('m-car').value.trim();
+      if (!car) { UI.toast('La carátula es obligatoria.', 'danger'); return; }
+      const data = {
+        caratula: car,
+        numero: document.getElementById('m-num').value.trim(),
+        clienteId: document.getElementById('m-cli').value,
+        juzgado: document.getElementById('m-juz').value.trim(),
+        fuero: document.getElementById('m-fuero').value,
+        estado: document.getElementById('m-est').value,
+        proximoVencimiento: document.getElementById('m-venc').value || null,
+        descripcion: document.getElementById('m-desc').value.trim()
+      };
+      if (editId) { Expedientes.actualizar(editId, data); UI.toast('Expediente actualizado.', 'success'); }
+      else        { Expedientes.crear(data);               UI.toast('Expediente creado.', 'success'); }
+      cerrar(); render();
+    }
+
+    function editar(id) { abrirModal(id); }
+    function eliminar(id) {
+      if (!UI.confirm('¿Eliminar este expediente? Esta acción no se puede deshacer.')) return;
+      Expedientes.eliminar(id); UI.toast('Expediente eliminado.', 'success'); render();
+    }
+    function cerrar() { document.getElementById('modal').style.display = 'none'; }
+
+    poblarFiltros();
+    render();
+  </script>
+</body>
+</html>
