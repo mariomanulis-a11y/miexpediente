@@ -2,40 +2,41 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Usuarios ────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+    function getUser() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+    function isProfesional() {
+      return isLoggedIn() && getUser().rol == 'profesional';
+    }
+    function isCliente() {
+      return isLoggedIn() && getUser().rol == 'cliente';
+    }
+    function isOwnerCliente(expData) {
+      return isCliente() && expData.clienteId == request.auth.uid;
+    }
+
+    // ── Usuarios ──────────────────────────────────────────────
+    // Cada usuario puede leer su propio perfil
+    // Solo profesionales pueden crear/editar/eliminar usuarios
     match /usuarios/{uid} {
-      allow read: if request.auth.uid == uid;
-      allow write: if request.auth.uid == uid;
+      allow read: if isLoggedIn() && (request.auth.uid == uid || isProfesional());
+      allow create: if isProfesional();
+      allow update: if isProfesional() || request.auth.uid == uid;
+      allow delete: if isProfesional();
     }
 
-    // ── Expedientes ─────────────────────────────────────────
+    // ── Expedientes ───────────────────────────────────────────
+    // Profesional: acceso total
+    // Cliente: solo lee sus propios expedientes (clienteId == su uid)
     match /expedientes/{expId} {
-      // El profesional propietario puede leer y escribir
-      allow read, write: if request.auth != null &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'profesional' &&
-        resource.data.profesionalId == request.auth.uid;
-
-      // El cliente solo puede leer su propio expediente
-      allow read: if request.auth != null &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'cliente' &&
-        resource.data.clienteId ==
-          get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.clienteId;
-
-      // Crear: solo profesionales
-      allow create: if request.auth != null &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'profesional' &&
-        request.resource.data.profesionalId == request.auth.uid;
-    }
-
-    // ── Clientes ────────────────────────────────────────────
-    match /clientes/{cliId} {
-      allow read, write: if request.auth != null &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'profesional' &&
-        resource.data.profesionalId == request.auth.uid;
-
-      allow create: if request.auth != null &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'profesional' &&
-        request.resource.data.profesionalId == request.auth.uid;
+      allow read:   if isProfesional() || isOwnerCliente(resource.data);
+      allow create: if isProfesional();
+      allow update: if isProfesional();
+      allow delete: if isProfesional();
     }
   }
 }
