@@ -698,5 +698,8 @@ setTimeout(function() {
   }
 }, 5000);
 
-// Iniciar router
+// Iniciar router (debe ir antes de Auth para que Router esté definido)
 Router.init();
+
+// Iniciar listener de autenticación (después de Router.init)
+Auth.initAuthListener();
