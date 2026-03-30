@@ -32,7 +32,9 @@ const Auth = {
               Router.go('dashboard');
             }
           } else {
-            await auth.signOut();
+            // No hay perfil en Firestore — NO hacer signOut para permitir bootstrap.
+            // El usuario queda autenticado en Firebase Auth pero sin acceso a la app.
+            Store.clear();
             Router.go('login');
           }
         } else {
@@ -41,6 +43,7 @@ const Auth = {
         }
       } catch (e) {
         console.error('[Auth] Error en onAuthStateChanged:', e);
+        Store.clear();
         Router.go('login');
       } finally {
         const loading = document.getElementById('loading-screen');
