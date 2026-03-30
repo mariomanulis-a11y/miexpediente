@@ -1,0 +1,34 @@
+/* MI EXPEDIENTE — Variables de diseno */
+:root {
+  --primary:    #0f3460;
+  --primary-lt: #1a4f8a;
+  --primary-dk: #081d3a;
+  --accent:     #c0392b;
+
+  --success:  #27ae60;
+  --warning:  #e67e22;
+  --danger:   #c0392b;
+  --info:     #2980b9;
+  --secondary:#6c757d;
+
+  --bg:        #f4f6f9;
+  --surface:   #ffffff;
+  --surface2:  #f0f2f5;
+  --border:    #dde1e7;
+
+  --text:       #1a202c;
+  --text-muted: #5a6475;
+  --text-light: #9aa5b4;
+
+  --sidebar-w:  240px;
+  --topnav-h:   58px;
+  --radius:     8px;
+  --radius-lg:  14px;
+  --shadow:     0 1px 6px rgba(0,0,0,.07);
+  --shadow-md:  0 4px 16px rgba(0,0,0,.10);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,.14);
+
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', monospace;
+  --transition: 0.18s ease;
+}
