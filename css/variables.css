@@ -31,4 +31,25 @@
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', monospace;
   --transition: 0.18s ease;
+
+  /* Alias para compatibilidad con layout.css y components.css */
+  --header-height:    var(--topnav-h);
+  --sidebar-width:    var(--sidebar-w);
+  --color-primary:    var(--primary);
+  --color-accent:     var(--accent);
+  --color-success:    var(--success);
+  --color-warning:    var(--warning);
+  --color-danger:     var(--danger);
+  --color-info:       var(--info);
+  --text-primary:     var(--text);
+  --border-color:     var(--border);
+  --border-radius-sm: var(--radius);
+  --border-radius-md: var(--radius);
+  --border-radius-lg: var(--radius-lg);
+  --bg-primary:       var(--surface);
+  --bg-secondary:     var(--surface2);
+  --bg-header:        var(--primary);
+  --bg-sidebar:       var(--primary-dk);
+  --text-on-dark:         #ffffff;
+  --text-on-dark-muted:   rgba(255,255,255,0.70);
 }
