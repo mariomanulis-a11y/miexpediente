@@ -54,9 +54,11 @@ const Router = {
     }
 
     if (fn) {
+      container.style.display = ''; // Quitar el display:none inicial
       container.innerHTML = '';
       fn(container);
     } else {
+      container.style.display = '';
       container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">404</div><p class="empty-state-text">Pagina no encontrada</p></div>';
     }
   },
