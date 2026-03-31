@@ -646,7 +646,7 @@ Router.register('configuracion', async function(container) {
     '<h3 class="card-title" style="margin-bottom:1rem">Link de solicitud para clientes</h3>' +
     '<p style="font-size:0.88rem;color:var(--text-muted)">Comparta este link con sus clientes para que soliciten acceso:</p>' +
     '<div style="display:flex;gap:0.5rem;margin-top:0.5rem">' +
-    '<input class="form-input" value="' + location.origin + '/#/solicitar-acceso" readonly id="link-input">' +
+    '<input class="form-input" value="' + (location.origin + location.pathname.replace(/\/[^/]*$/, '/')) + '#/solicitar-acceso" readonly id="link-input">' +
     '<button class="btn btn-outline" onclick="copiarLink()">Copiar</button></div>' +
     '</div>';
 });
@@ -686,7 +686,7 @@ Router.register('solicitar-acceso', function(container) {
 
 // ── PWA service worker ──────────────────────────────────────
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(function() {});
+  navigator.serviceWorker.register(location.pathname.replace(/\/[^/]*$/, '/') + 'sw.js').catch(function() {});
 }
 
 // Timeout de seguridad: oculta el loading-screen si Firebase no responde en 5s
