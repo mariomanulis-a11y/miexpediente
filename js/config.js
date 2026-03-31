@@ -14,7 +14,7 @@ const FIREBASE_CONFIG = {
 // ── WhatsApp del estudio ──────────────────────────────────────
 // Reemplazá con tu número real (formato: 549 + código de área + número)
 const WA_CONFIG = {
-  numeroEstudio: "5491144000000",
+  numeroEstudio: "5491144496992",
   mensaje: "Hola, quisiera solicitar acceso a MiExpediente para consultar el estado de mi causa."
 };
 
