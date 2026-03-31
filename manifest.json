@@ -2,7 +2,8 @@
   "name": "MiExpediente",
   "short_name": "MiExpediente",
   "description": "Seguimiento de causas judiciales – Estudio Jurídico Manulis",
-  "start_url": "/",
+  "start_url": "/miexpediente/",
+  "scope": "/miexpediente/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",
@@ -14,6 +15,6 @@
   ],
   "categories": ["utilities", "productivity"],
   "shortcuts": [
-    { "name": "Mis causas", "url": "/#/expedientes", "description": "Ver mis expedientes" }
+    { "name": "Mis causas", "url": "/miexpediente/#/expedientes", "description": "Ver mis expedientes" }
   ]
 }
