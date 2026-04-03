@@ -70,6 +70,7 @@ function renderSidebar() {
     html += link('clientes', '👥', 'Clientes');
     html += link('nuevo-expediente', '➕', 'Nuevo Expediente');
     html += '<div class="sidebar-label">Herramientas</div>';
+    html += link('reportes', '📊', 'Reportes &amp; Auditoría');
     html += '<div style="padding:6px 12px">' +
             '<button id="sync-btn" class="btn-sync" onclick="syncDesdeSheets()" style="width:100%">' +
             '&#8635; Sincronizar desde Sheet</button></div>';
@@ -827,6 +828,316 @@ async function doEliminarCliente(id) {
   } catch(e) {
     toast('Error al eliminar', 'error');
   }
+}
+
+// ================================================================
+// REPORTES — Analítica y auditoría de expedientes (solo admin)
+// ================================================================
+Router.register('reportes', async function(container) {
+  container.className = 'view-container fade-in';
+  renderHeader(); renderSidebar();
+  if (!Store.isProfesional()) { Router.go('dashboard'); return; }
+
+  container.innerHTML =
+    '<div class="page-header">' +
+    '<div><h1 class="page-title">Reportes &amp; Auditoría</h1>' +
+    '<p style="color:var(--text-muted);font-size:.85rem">Análisis estadístico y consistencia de expedientes</p></div>' +
+    '<div class="page-actions">' +
+    '<button class="btn btn-outline btn-sm" id="btn-csv" onclick="exportarCSV()">&#8615; Exportar CSV</button>' +
+    '<button class="btn btn-outline btn-sm" id="btn-json" onclick="exportarJSON()">&#8615; Exportar JSON</button>' +
+    '</div></div>' +
+    '<div id="rep-body"><div class="spinner"></div></div>';
+
+  try {
+    const exps = await API.getExpedientes();
+    window._repExps = exps;
+    _renderReportes(exps);
+  } catch(e) {
+    document.getElementById('rep-body').innerHTML = '<p class="form-error">Error al cargar datos: ' + e.message + '</p>';
+  }
+});
+
+// ── Motor de cálculo ──────────────────────────────────────────
+function _daysSinceStr(str) {
+  if (!str) return null;
+  // Acepta ISO (2024-03-15) y dd/mm/yyyy
+  var d;
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    d = new Date(str);
+  } else {
+    var p = str.split('/');
+    if (p.length === 3) d = new Date(+p[2], +p[1] - 1, +p[0]);
+  }
+  if (!d || isNaN(d.getTime())) return null;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+function _normFuero(fuero) {
+  if (!fuero) return 'Sin especificar';
+  var f = fuero.toLowerCase();
+  if (f.indexOf('civil') >= 0) return 'Civil PBA';
+  if (f.indexOf('naci') >= 0 || f.indexOf('nac') >= 0) return 'Laboral Nación';
+  if (f.indexOf('laboral') >= 0) return 'Laboral PBA';
+  return fuero;
+}
+
+function _calcKPIs(exps) {
+  var hoy   = Date.now();
+  var total = exps.length;
+
+  // Distribución por fuero
+  var byFuero = {};
+  // Distribución por juzgado
+  var byJuzgado = {};
+  // Tiempo por etapa (suma días, conteo)
+  var byEtapa = {};
+  // Proyección 2026
+  var enCarrera = 0, demoradas = 0, sinProyeccion = 0;
+  // Auditoría
+  var sinActualizar = [];   // > 30 días sin fecha
+  var discrepancias = [];   // etapa vs tareas
+  var stale30 = [];
+
+  exps.forEach(function(e) {
+    var fuero  = _normFuero(e.fuero);
+    var juzgado = e.juzgado || 'Sin juzgado';
+    var etapa  = e.etapaProcesal || e.etapaGAS || 'Sin etapa';
+
+    // Por fuero
+    byFuero[fuero]    = (byFuero[fuero]    || 0) + 1;
+    byJuzgado[juzgado]= (byJuzgado[juzgado]|| 0) + 1;
+
+    // Tiempo en etapa actual (desde fechaInicio como proxy)
+    var dias = _daysSinceStr(e.start_date || e.fechaInicio);
+    if (dias !== null) {
+      if (!byEtapa[etapa]) byEtapa[etapa] = { suma: 0, cnt: 0 };
+      byEtapa[etapa].suma += dias;
+      byEtapa[etapa].cnt  += 1;
+    }
+
+    // Proyección 2026
+    var proy = (e.adminData && e.adminData.goal_2026) || e.proyeccion || '';
+    if (!proy) {
+      sinProyeccion++;
+    } else {
+      // Tiene proyección → ¿fecha futura o pasada?
+      var dp = _daysSinceStr(proy);
+      if (dp === null) {
+        sinProyeccion++;
+      } else if (dp <= 0) {
+        enCarrera++;   // fecha en el futuro (días negativos = aún no llegó)
+      } else {
+        demoradas++;   // ya pasó la fecha proyectada
+      }
+    }
+
+    // Auditoría: sin actualización > 30 días
+    var ref  = e.start_date || e.fechaInicio || '';
+    var dref = _daysSinceStr(ref);
+    if (dref !== null && dref > 30) {
+      sinActualizar.push(e);
+    }
+
+    // Auditoría: discrepancia etapa vs tareas
+    var etapaLow  = etapa.toLowerCase();
+    var tareasLow = (e.tasks_notes || e.tareas || '').toLowerCase();
+    var etapaFinal = etapaLow.indexOf('sentencia') >= 0 || etapaLow.indexOf('fallo') >= 0 || etapaLow.indexOf('ejecutar') >= 0;
+    var tienePrueba = tareasLow.indexOf('peric') >= 0 || tareasLow.indexOf('prueba') >= 0 || tareasLow.indexOf('testimonial') >= 0;
+    if (etapaFinal && tienePrueba) discrepancias.push(e);
+  });
+
+  return { total, byFuero, byJuzgado, byEtapa, enCarrera, demoradas, sinProyeccion, sinActualizar, discrepancias };
+}
+
+// ── Render principal ──────────────────────────────────────────
+function _renderReportes(exps) {
+  var kpi = _calcKPIs(exps);
+  var h   = '';
+
+  // ── 1. Resumen Ejecutivo ──────────────────────────────────
+  h += '<div class="card" style="margin-bottom:1.25rem;padding:1.5rem">';
+  h += '<div class="detail-section-title" style="margin-bottom:1rem">&#128200; Resumen Ejecutivo</div>';
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1rem">';
+  var kpis = [
+    { lbl:'Total causas',    val: kpi.total,              color:'var(--primary)' },
+    { lbl:'En carrera 2026', val: kpi.enCarrera,          color:'var(--success)' },
+    { lbl:'Con demora',      val: kpi.demoradas,          color:'var(--danger)'  },
+    { lbl:'Sin proyección',  val: kpi.sinProyeccion,      color:'var(--warning)' },
+    { lbl:'Sin actualizar',  val: kpi.sinActualizar.length,color:'#e67e22'       },
+    { lbl:'Discrepancias',   val: kpi.discrepancias.length,color:'#8b5cf6'       }
+  ];
+  kpis.forEach(function(k) {
+    h += '<div style="background:var(--surface2);border-radius:var(--radius);padding:1rem;text-align:center">' +
+         '<div style="font-size:1.8rem;font-weight:700;color:' + k.color + '">' + k.val + '</div>' +
+         '<div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-top:4px">' + k.lbl + '</div>' +
+         '</div>';
+  });
+  h += '</div></div>';
+
+  // ── 2. Distribución por Fuero (barras CSS) ────────────────
+  h += '<div class="card" style="margin-bottom:1.25rem;padding:1.5rem">';
+  h += '<div class="detail-section-title" style="margin-bottom:1rem">&#9878; Distribución por Fuero</div>';
+  var fColors = { 'Civil PBA':'#2563eb', 'Laboral PBA':'#16a34a', 'Laboral Nación':'#d97706', 'Sin especificar':'#9ca3af' };
+  Object.keys(kpi.byFuero).forEach(function(f) {
+    var cnt = kpi.byFuero[f];
+    var pct = Math.round(cnt / kpi.total * 100);
+    var c   = fColors[f] || '#6b7280';
+    h += '<div style="margin-bottom:.75rem">' +
+         '<div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px">' +
+         '<span style="font-weight:500">' + f + '</span><span style="color:var(--text-muted)">' + cnt + ' (' + pct + '%)</span></div>' +
+         '<div style="background:var(--surface2);border-radius:4px;height:12px;overflow:hidden">' +
+         '<div style="width:' + pct + '%;background:' + c + ';height:100%;border-radius:4px;transition:width .5s"></div>' +
+         '</div></div>';
+  });
+  h += '</div>';
+
+  // ── 3. Cuello de Botella: tiempo promedio por etapa ───────
+  var etapasSorted = Object.keys(kpi.byEtapa).map(function(e) {
+    return { nombre: e, avg: Math.round(kpi.byEtapa[e].suma / kpi.byEtapa[e].cnt), cnt: kpi.byEtapa[e].cnt };
+  }).sort(function(a,b) { return b.avg - a.avg; });
+
+  if (etapasSorted.length) {
+    var maxAvg = etapasSorted[0].avg || 1;
+    h += '<div class="card" style="margin-bottom:1.25rem;padding:1.5rem">';
+    h += '<div class="detail-section-title" style="margin-bottom:1rem">&#9203; Análisis de Cuellos de Botella (días promedio en etapa)</div>';
+    etapasSorted.forEach(function(e) {
+      var pct = Math.round(e.avg / maxAvg * 100);
+      var c   = e.avg > 180 ? '#ef4444' : e.avg > 90 ? '#f59e0b' : '#22c55e';
+      h += '<div style="margin-bottom:.75rem">' +
+           '<div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px">' +
+           '<span style="font-weight:500">' + e.nombre + '</span>' +
+           '<span style="color:' + c + ';font-weight:600">' + e.avg + ' días</span></div>' +
+           '<div style="background:var(--surface2);border-radius:4px;height:10px;overflow:hidden">' +
+           '<div style="width:' + pct + '%;background:' + c + ';height:100%;border-radius:4px"></div>' +
+           '</div></div>';
+    });
+    h += '</div>';
+  }
+
+  // ── 4. Proyección 2026 ────────────────────────────────────
+  h += '<div class="card" style="margin-bottom:1.25rem;padding:1.5rem">';
+  h += '<div class="detail-section-title" style="margin-bottom:1rem">&#127937; Efectividad de Proyección 2026</div>';
+  var totalConProy = kpi.enCarrera + kpi.demoradas;
+  [
+    { lbl:'En carrera (dentro de plazo)', val:kpi.enCarrera,    c:'#22c55e' },
+    { lbl:'Con demora crítica',           val:kpi.demoradas,    c:'#ef4444' },
+    { lbl:'Sin proyección cargada',       val:kpi.sinProyeccion,c:'#9ca3af' }
+  ].forEach(function(row) {
+    var pct = kpi.total ? Math.round(row.val / kpi.total * 100) : 0;
+    h += '<div style="margin-bottom:.75rem">' +
+         '<div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px">' +
+         '<span>' + row.lbl + '</span><span style="color:' + row.c + ';font-weight:600">' + row.val + ' (' + pct + '%)</span></div>' +
+         '<div style="background:var(--surface2);border-radius:4px;height:10px">' +
+         '<div style="width:' + pct + '%;background:' + row.c + ';height:100%;border-radius:4px"></div>' +
+         '</div></div>';
+  });
+  h += '</div>';
+
+  // ── 5. Tabla Alerta Roja: sin actualización > 30 días ─────
+  h += '<div class="card" style="margin-bottom:1.25rem;border:1px solid rgba(239,68,68,.35)">';
+  h += '<div style="padding:1rem 1.5rem;border-bottom:1px solid rgba(239,68,68,.2);display:flex;align-items:center;gap:.5rem">' +
+       '<span style="color:#ef4444;font-size:1.1rem">&#9888;</span>' +
+       '<span style="font-weight:600;color:#ef4444">Alerta Roja — Causas sin actualización (+30 días)</span>' +
+       '<span style="margin-left:auto;background:#ef444422;color:#ef4444;border-radius:12px;padding:2px 10px;font-size:.75rem;font-weight:700">' + kpi.sinActualizar.length + '</span>' +
+       '</div>';
+  if (!kpi.sinActualizar.length) {
+    h += '<div style="padding:1.5rem;color:var(--text-muted);font-size:.88rem">&#10003; No hay causas paralizadas.</div>';
+  } else {
+    h += '<div class="table-wrapper"><table><thead><tr><th>Carátula</th><th>Fuero</th><th>Etapa</th><th>Días sin actualizar</th><th></th></tr></thead><tbody>';
+    kpi.sinActualizar.forEach(function(e) {
+      var dias = _daysSinceStr(e.start_date || e.fechaInicio || '') || '—';
+      h += '<tr onclick="Router.go(\'expediente-detalle\',{id:\'' + e.id + '\'})" style="cursor:pointer">' +
+           '<td style="font-weight:500">' + (e.caratula || '—') + '</td>' +
+           '<td>' + _normFuero(e.fuero) + '</td>' +
+           '<td>' + (e.etapaProcesal || e.etapaGAS || '—') + '</td>' +
+           '<td style="color:#ef4444;font-weight:700">' + dias + '</td>' +
+           '<td><span style="background:#ef444418;color:#ef4444;border-radius:12px;padding:2px 8px;font-size:.72rem">Paralizada</span></td>' +
+           '</tr>';
+    });
+    h += '</tbody></table></div>';
+  }
+  h += '</div>';
+
+  // ── 6. Discrepancias Etapa vs Tareas ─────────────────────
+  h += '<div class="card" style="margin-bottom:1.25rem;border:1px solid rgba(139,92,246,.35)">';
+  h += '<div style="padding:1rem 1.5rem;border-bottom:1px solid rgba(139,92,246,.2);display:flex;align-items:center;gap:.5rem">' +
+       '<span style="color:#8b5cf6;font-size:1.1rem">&#9888;</span>' +
+       '<span style="font-weight:600;color:#8b5cf6">Auditoría — Discrepancias Etapa vs Tareas</span>' +
+       '<span style="margin-left:auto;background:#8b5cf622;color:#8b5cf6;border-radius:12px;padding:2px 10px;font-size:.75rem;font-weight:700">' + kpi.discrepancias.length + '</span>' +
+       '</div>';
+  if (!kpi.discrepancias.length) {
+    h += '<div style="padding:1.5rem;color:var(--text-muted);font-size:.88rem">&#10003; No se detectaron discrepancias.</div>';
+  } else {
+    h += '<div class="table-wrapper"><table><thead><tr><th>Carátula</th><th>Etapa registrada</th><th>Tarea conflictiva</th></tr></thead><tbody>';
+    kpi.discrepancias.forEach(function(e) {
+      h += '<tr onclick="Router.go(\'expediente-detalle\',{id:\'' + e.id + '\'})" style="cursor:pointer">' +
+           '<td style="font-weight:500">' + (e.caratula || '—') + '</td>' +
+           '<td>' + (e.etapaProcesal || e.etapaGAS || '—') + '</td>' +
+           '<td style="color:#8b5cf6;font-size:.82rem">' + ((e.tasks_notes || e.tareas || '').slice(0,80)) + '…</td>' +
+           '</tr>';
+    });
+    h += '</tbody></table></div>';
+  }
+  h += '</div>';
+
+  document.getElementById('rep-body').innerHTML = h;
+}
+
+// ── Exportar CSV ──────────────────────────────────────────────
+function exportarCSV() {
+  var exps = window._repExps || [];
+  var header = ['ID','Caratula','Fuero','Juzgado','Etapa','Inicio','Proyeccion 2026','Dias en etapa','Tareas pendientes'];
+  var rows = exps.map(function(e) {
+    var dias = _daysSinceStr(e.start_date || e.fechaInicio || '') || '';
+    var proy = (e.adminData && e.adminData.goal_2026) || e.proyeccion || '';
+    return [
+      e.id,
+      '"' + (e.caratula  || '').replace(/"/g,'""') + '"',
+      '"' + _normFuero(e.fuero) + '"',
+      '"' + (e.juzgado   || '').replace(/"/g,'""') + '"',
+      '"' + (e.etapaProcesal || e.etapaGAS || '') + '"',
+      e.start_date || e.fechaInicio || '',
+      proy,
+      dias,
+      '"' + (e.tasks_notes || e.tareas || '').replace(/"/g,'""').replace(/\n/g,' ') + '"'
+    ].join(',');
+  });
+  var csv  = [header.join(',')].concat(rows).join('\n');
+  var blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url;
+  a.download = 'expedientes-MVC-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+  toast('CSV exportado', 'success');
+}
+
+// ── Exportar JSON ─────────────────────────────────────────────
+function exportarJSON() {
+  var exps = window._repExps || [];
+  var data = exps.map(function(e) {
+    return {
+      id:           e.id,
+      caratula:     e.caratula,
+      fuero:        _normFuero(e.fuero),
+      juzgado:      e.juzgado,
+      etapa:        e.etapaProcesal || e.etapaGAS || '',
+      fechaInicio:  e.start_date || e.fechaInicio || '',
+      proyeccion2026: (e.adminData && e.adminData.goal_2026) || e.proyeccion || '',
+      diasEnEtapa:  _daysSinceStr(e.start_date || e.fechaInicio || ''),
+      tareas:       e.tasks_notes || e.tareas || '',
+      estado:       e.estado
+    };
+  });
+  var blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url;
+  a.download = 'expedientes-MVC-' + new Date().toISOString().slice(0,10) + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+  toast('JSON exportado', 'success');
 }
 
 // PERFIL
