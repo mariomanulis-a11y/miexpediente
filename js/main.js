@@ -336,15 +336,17 @@ Router.register('expediente-detalle', async function(container) {
       '</div>' +
       '</div>' +
       '</div>' +
-      // Sección GAS: se rellena asincrónicamente después del render
-      '<div id="gas-causas-section" style="margin-top:1rem">' +
-        '<div class="card"><div class="card-header"><h3 class="card-title">&#128204; Estado en seguimiento GAS</h3></div>' +
-        '<div class="card-body" id="gas-causas-body"><div class="spinner" style="margin:.5rem auto"></div></div>' +
-        '</div>' +
-      '</div>';
+      // Sección GAS: solo visible para profesional/administrador
+      (isPro
+        ? '<div id="gas-causas-section" style="margin-top:1rem">' +
+            '<div class="card"><div class="card-header"><h3 class="card-title">&#128204; Estado en seguimiento GAS</h3></div>' +
+            '<div class="card-body" id="gas-causas-body"><div class="spinner" style="margin:.5rem auto"></div></div>' +
+            '</div>' +
+          '</div>'
+        : '');
 
-    // Carga GAS sin bloquear el render principal
-    _loadGasCausas(exp);
+    // Carga GAS sin bloquear el render principal (solo para profesional)
+    if (isPro) _loadGasCausas(exp);
 
   } catch(e) {
     container.innerHTML = '<p class="form-error">Error al cargar el expediente.</p>';
