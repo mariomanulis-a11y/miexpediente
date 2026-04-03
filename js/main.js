@@ -481,9 +481,7 @@ Router.register('expediente-detalle', async function(container) {
     _loadGasCausas(exp);
 
   } catch(e) {
-    container.innerHTML = '<p class="form-error">Error al cargar el expediente.</p>' +
-      '<pre style="font-size:.75rem;color:#c0392b;white-space:pre-wrap;padding:1rem;background:#fef2f2;border-radius:6px;margin-top:.5rem">' +
-      (e && e.stack ? e.stack : String(e)) + '</pre>';
+    container.innerHTML = '<p class="form-error">Error al cargar el expediente: ' + (e && e.message ? e.message : String(e)) + '</p>';
   }
 });
 

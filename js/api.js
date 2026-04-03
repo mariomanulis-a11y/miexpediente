@@ -98,6 +98,7 @@ const API = {
         start_date:     c.fechaInicio   || '',   // FECHA INICIO → start_date
         tasks_notes:    c.tareas        || '',   // DETALLE TAREAS PENDIENTES → tasks_notes
         etapaGAS:       c.etapa         || '',
+        etapaProcesal:  c.etapa         || '',   // también sincroniza el campo editable
         detalleGAS:     c.detalle       || '',
         _sheetName:     c._sheetName    || '',
         adminData: {
