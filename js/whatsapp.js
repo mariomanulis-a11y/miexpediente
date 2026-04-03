@@ -16,6 +16,16 @@ const WA = {
     );
     return 'https://wa.me/' + numero + '?text=' + msg;
   },
+  linkExpediente(numero, caratula, etapa, expId) {
+    var url = location.origin + location.pathname + '#/expediente-detalle/' + (expId || '');
+    var msg = encodeURIComponent(
+      '\u00a1Hola! Te damos la bienvenida a MVC Abogados. \u2696\ufe0f\n' +
+      'Para seguir el avance de tu causa ' + caratula + ' en tiempo real, ingres\u00e1 aqu\u00ed: ' + url + '\n' +
+      'Actualmente nos encontramos en la etapa: ' + etapa + '.\n' +
+      'Pod\u00e9s ver los detalles y pasos faltantes en el link arriba. \u00a1Gracias!'
+    );
+    return 'https://wa.me/' + numero + '?text=' + msg;
+  },
   abrirWA(url) {
     window.open(url, '_blank');
   }

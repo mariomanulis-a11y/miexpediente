@@ -14,3 +14,103 @@
 .info-val { font-weight:500; }
 .wa-btn { display:inline-flex; align-items:center; gap:8px; background:#25d366; color:#fff; border:none; padding:10px 18px; border-radius:var(--radius); font-size:14px; font-weight:500; cursor:pointer; transition:background var(--transition); text-decoration:none; }
 .wa-btn:hover { background:#1da851; }
+
+/* ── Fuero badge ─────────────────────────────────────────── */
+.fuero-badge {
+  display: inline-flex; align-items: center;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: .72rem; font-weight: 600;
+  letter-spacing: .4px; text-transform: uppercase;
+  margin-bottom: 1rem;
+}
+
+/* ── Stepper / Timeline ──────────────────────────────────── */
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: .25rem 0;
+  margin-bottom: 1.25rem;
+}
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  position: relative;
+  padding-bottom: .1rem;
+}
+.step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 11px; top: 26px;
+  width: 2px;
+  height: calc(100% + .25rem);
+  background: var(--border);
+}
+.step-done::after  { background: var(--step-c, var(--primary)) !important; }
+.step-dot {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .7rem; font-weight: 700;
+  flex-shrink: 0;
+  position: relative; z-index: 1;
+}
+.step-dot-done {
+  background: var(--step-c, var(--primary));
+  color: #fff;
+  font-size: .65rem;
+}
+.step-dot-current {
+  color: #fff;
+  font-size: .55rem;
+}
+.step-dot-pending {
+  background: var(--surface2);
+  color: var(--text-light);
+  border: 2px solid var(--border);
+  font-size: .85rem;
+}
+.step-label {
+  padding: 3px 0 12px;
+  font-size: .875rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.step-label-current {
+  font-weight: 600;
+  font-size: .9rem;
+}
+
+/* Pulse animation — etapa actual */
+@keyframes step-pulse {
+  0%   { box-shadow: 0 0 0 0px rgba(var(--pulse-rgb, 37,99,235), .45); }
+  70%  { box-shadow: 0 0 0 8px rgba(var(--pulse-rgb, 37,99,235), 0); }
+  100% { box-shadow: 0 0 0 0px rgba(var(--pulse-rgb, 37,99,235), 0); }
+}
+.step-pulse { animation: step-pulse 2s ease-out infinite; }
+
+/* Estado aviso (cliente) */
+.estado-aviso {
+  border-radius: var(--radius);
+  padding: .75rem 1rem;
+  font-size: .875rem;
+  line-height: 1.5;
+  margin-top: .5rem;
+}
+
+/* Sync button */
+.btn-sync {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: .78rem;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: all var(--transition);
+}
+.btn-sync:hover { background: var(--border); color: var(--text); }
+.btn-sync:disabled { opacity:.5; cursor:not-allowed; }

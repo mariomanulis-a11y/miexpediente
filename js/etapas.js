@@ -204,6 +204,29 @@ var EtapasProcesales = (function () {
       };
     },
 
+    // Roadmap: devuelve {completadas[], actual, pendientes[], hito, ley, color}
+    // Usá esto para el stepper del cliente y el panel de etapas del admin.
+    getRoadmap: function (fuero, etapaActual) {
+      if (!fuero || !FUEROS[fuero] || !etapaActual) return null;
+      // Excluimos "Otra / Detalle" (id 7) del flujo principal
+      var etapas = FUEROS[fuero].etapas.filter(function (e) { return e.id !== 7; });
+      var meta   = FUEROS[fuero];
+      var idx    = -1;
+      for (var i = 0; i < etapas.length; i++) {
+        if (etapas[i].nombre === etapaActual) { idx = i; break; }
+      }
+      if (idx === -1) return null;
+      return {
+        completadas: etapas.slice(0, idx).map(function (e) { return e.nombre; }),
+        actual:      etapas[idx].nombre,
+        definicion:  etapas[idx].definicion,
+        pendientes:  etapas.slice(idx + 1).map(function (e) { return e.nombre; }),
+        hito:        meta.hito,
+        ley:         meta.ley,
+        color:       meta.color
+      };
+    },
+
     // Clasifica texto libre dentro del fuero y devuelve la etapa sugerida
     clasificar: function (fuero, texto) {
       if (!fuero || !FUEROS[fuero] || !texto) return null;

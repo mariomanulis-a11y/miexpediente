@@ -69,6 +69,10 @@ function renderSidebar() {
     html += '<div class="sidebar-label">Gestion</div>';
     html += link('clientes', '👥', 'Clientes');
     html += link('nuevo-expediente', '➕', 'Nuevo Expediente');
+    html += '<div class="sidebar-label">Herramientas</div>';
+    html += '<div style="padding:6px 12px">' +
+            '<button id="sync-btn" class="btn-sync" onclick="syncDesdeSheets()" style="width:100%">' +
+            '&#8635; Sincronizar desde Sheet</button></div>';
   }
   html += '<div class="sidebar-label">Cuenta</div>';
   html += link('perfil', '👤', 'Mi Perfil');
@@ -84,6 +88,19 @@ function renderSidebar() {
     bd.className = 'sidebar-backdrop';
     bd.onclick = closeSidebar;
     document.body.appendChild(bd);
+  }
+}
+
+async function syncDesdeSheets() {
+  var btn = document.getElementById('sync-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sincronizando...'; }
+  try {
+    var result = await API.syncFromSheets();
+    toast('Sincronizado: ' + result.created + ' nuevos, ' + result.upserted + ' actualizados', 'success', 5000);
+  } catch(e) {
+    toast('Error al sincronizar: ' + (e.message || 'Sin conexión al Sheet'), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Sincronizar desde Sheet'; }
   }
 }
 
@@ -273,19 +290,97 @@ Router.register('expedientes', async function(container) {
 });
 
 function renderExpCard(e) {
-  return '<div class="expediente-card" onclick="verExpediente(\'' + e.id + '\')">' +
-    '<div class="expediente-card-header">' +
+  var isPro  = Store.isProfesional();
+  var etapa  = e.etapaProcesal || e.etapaGAS || '';
+  var waLink = (isPro && e.clienteTelefono && etapa)
+    ? WA.linkExpediente(e.clienteTelefono, e.caratula, etapa, e.id)
+    : null;
+  return '<div class="expediente-card">' +
+    '<div class="expediente-card-header" onclick="verExpediente(\'' + e.id + '\')" style="cursor:pointer">' +
     '<div><div class="expediente-numero">' + (e.numero || 'S/N') + '</div>' +
     '<div class="expediente-caratula">' + Utils.truncate(e.caratula, 55) + '</div></div>' +
     Utils.statusBadge(e.estado || 'activo') + '</div>' +
     '<div class="expediente-juzgado">' + (e.juzgado || '') + '</div>' +
     '<div class="expediente-meta">' +
     '<span class="expediente-fecha">Actualizado: ' + Utils.formatDate(e.updatedAt) + '</span>' +
+    (waLink
+      ? '<a href="' + waLink + '" target="_blank" onclick="event.stopPropagation()" ' +
+        'style="display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;' +
+        'border-radius:4px;padding:3px 9px;font-size:.72rem;text-decoration:none;margin-left:auto">&#128362; WA</a>'
+      : '') +
     '</div></div>';
 }
 
 function verExpediente(id) {
   Router.go('expediente-detalle', { id: id });
+}
+
+// ── Helpers de color por fuero ────────────────────────────────
+function _fueroColors(fuero) {
+  if (!fuero) return { primary: '#0f3460', light: '#e8edf5', dark: '#081d3a', rgb: '15,52,96' };
+  var f = fuero.toLowerCase();
+  if (f.indexOf('civil') >= 0)
+    return { primary: '#2563eb', light: '#dbeafe', dark: '#1d4ed8', rgb: '37,99,235' };
+  if (f.indexOf('laboral') >= 0 && (f.indexOf('naci') >= 0 || f.indexOf('nac') >= 0))
+    return { primary: '#d97706', light: '#fef3c7', dark: '#b45309', rgb: '217,119,6' };
+  if (f.indexOf('laboral') >= 0)
+    return { primary: '#16a34a', light: '#dcfce7', dark: '#15803d', rgb: '22,163,74' };
+  return { primary: '#0f3460', light: '#e8edf5', dark: '#081d3a', rgb: '15,52,96' };
+}
+
+// ── Stepper para la vista cliente ────────────────────────────
+function _renderStepper(fuero, etapaActual, tasksNotes) {
+  if (!fuero || !etapaActual) {
+    return '<div class="card" style="padding:1.5rem"><p style="color:var(--text-muted);font-size:.88rem">Tu causa está siendo procesada. Comunicate con el estudio para más información.</p></div>';
+  }
+  var roadmap = EtapasProcesales.getRoadmap(fuero, etapaActual);
+  var colors  = _fueroColors(fuero);
+  if (!roadmap) {
+    return '<div class="card" style="padding:1.5rem"><p style="color:var(--text-muted);font-size:.88rem">Etapa en proceso.</p></div>';
+  }
+  var isUrgent = /urgente|vencimiento/i.test(tasksNotes || '');
+
+  var h = '<div class="card" style="padding:1.25rem 1.5rem">';
+
+  // Fuero badge
+  h += '<span class="fuero-badge" style="background:' + colors.light + ';color:' + colors.dark + ';border:1px solid ' + colors.primary + '33">' + fuero + '</span>';
+
+  // Stepper
+  h += '<div class="stepper">';
+
+  roadmap.completadas.forEach(function(n) {
+    h += '<div class="step step-done" style="--step-c:' + colors.primary + '">' +
+         '<div class="step-dot step-dot-done" style="background:' + colors.primary + '">&#10003;</div>' +
+         '<div class="step-label">' + n + '</div></div>';
+  });
+
+  h += '<div class="step step-current" style="--step-c:' + colors.primary + '">' +
+       '<div class="step-dot step-dot-current step-pulse" style="background:' + colors.primary + ';--pulse-rgb:' + colors.rgb + '">&#9679;</div>' +
+       '<div class="step-label step-label-current" style="color:' + colors.primary + '">' + roadmap.actual + '</div></div>';
+
+  roadmap.pendientes.forEach(function(n) {
+    h += '<div class="step step-pending">' +
+         '<div class="step-dot step-dot-pending">&#9675;</div>' +
+         '<div class="step-label">' + n + '</div></div>';
+  });
+
+  h += '<div class="step step-pending"><div class="step-dot step-dot-pending">&#127937;</div>' +
+       '<div class="step-label">' + roadmap.hito + '</div></div>';
+
+  h += '</div>'; // /stepper
+
+  // Estado aviso
+  if (tasksNotes && tasksNotes.trim()) {
+    var alertColor = isUrgent ? 'var(--danger)' : colors.primary;
+    var alertBg    = isUrgent ? '#fef2f2'        : colors.light;
+    h += '<div class="estado-aviso" style="background:' + alertBg + ';border-left:3px solid ' + alertColor + ';color:' + alertColor + '">' +
+         (isUrgent ? '&#9888;&#65039; ' : 'ℹ️ ') +
+         '<strong>Estado actual:</strong><br>' + Utils.truncate(tasksNotes, 200) +
+         '</div>';
+  }
+
+  h += '</div>'; // /card
+  return h;
 }
 
 // EXPEDIENTE DETALLE
@@ -300,53 +395,90 @@ Router.register('expediente-detalle', async function(container) {
     if (!exp) { container.innerHTML = '<p class="form-error">Expediente no encontrado.</p>'; return; }
     Store.setCurrent(exp);
     const isPro = Store.isProfesional();
-    const user = Store.getUser();
-    const waLink = exp.clienteTelefono ? WA.linkNovedades(exp.clienteTelefono, exp.caratula, 'Hay nuevas novedades en su expediente.') : null;
+    const colors = _fueroColors(exp.fuero);
+    const etapaActual = exp.etapaProcesal || exp.etapaGAS || '';
+    const tasksNotes  = exp.tasks_notes || exp.tareas || '';
 
-    container.innerHTML =
+    // ── WA link para notificar cliente (admin) ──────────────
+    var waExpLink = (isPro && exp.clienteTelefono && etapaActual)
+      ? WA.linkExpediente(exp.clienteTelefono, exp.caratula, etapaActual, id)
+      : null;
+
+    // ── Header compartido ───────────────────────────────────
+    var html =
       '<div class="page-header"><div>' +
       '<button class="btn btn-ghost btn-sm" onclick="Router.go(\'expedientes\')" style="margin-bottom:0.5rem">&larr; Volver</button>' +
       '<h1 class="page-title">' + Utils.truncate(exp.caratula, 60) + '</h1>' +
-      '<p class="page-subtitle">' + (exp.numero || 'S/N') + ' &mdash; ' + Utils.statusBadge(exp.estado || 'activo') + '</p></div>' +
-      (isPro ? '<div class="page-actions">' +
-        (waLink ? '<a class="btn btn-wa btn-sm" href="' + waLink + '" target="_blank">&#128362; Notificar cliente</a>' : '') +
-        '<button class="btn btn-outline btn-sm" onclick="editarExpediente(\'' + id + '\')">&#9998; Editar</button>' +
-        '<button class="btn btn-danger btn-sm" onclick="confirmarEliminar(\'' + id + '\')">&#128465; Eliminar</button>' +
-        '</div>' : '') +
-      '</div>' +
-      Views.etapaPanel(exp.fuero, exp.etapaProcesal) +
-      '<div class="grid-2">' +
+      '<p class="page-subtitle">' + (exp.numero || 'S/N') + ' &mdash; ' + Utils.statusBadge(exp.estado || 'activo') + '</p></div>';
+
+    if (isPro) {
+      html += '<div class="page-actions">';
+      if (waExpLink) {
+        html += '<a class="btn btn-sm" href="' + waExpLink + '" target="_blank" ' +
+                'style="background:#25D366;color:#fff;border-color:#25D366">&#128362; Enviar por WA</a>';
+      }
+      html += '<button class="btn btn-outline btn-sm" onclick="editarExpediente(\'' + id + '\')">&#9998; Editar</button>' +
+              '<button class="btn btn-danger btn-sm" onclick="confirmarEliminar(\'' + id + '\')">&#128465; Eliminar</button>' +
+              '</div>';
+    }
+    html += '</div>'; // /page-header
+
+    // ── VISTA CLIENTE: solo stepper ─────────────────────────
+    if (!isPro) {
+      html += _renderStepper(exp.fuero, etapaActual, tasksNotes);
+      html += '<div class="card" style="margin-top:1rem">' +
+              '<div class="card-header"><h3 class="card-title">Novedades</h3></div>' +
+              '<div class="card-body" id="actualizaciones-list">' + renderActualizaciones(exp.actualizaciones || []) + '</div>' +
+              '</div>';
+      container.innerHTML = html;
+      return;
+    }
+
+    // ── VISTA ADMIN: tabla técnica completa ─────────────────
+    // Panel de etapa procesal con color de fuero
+    html += Views.etapaPanel(exp.fuero, etapaActual);
+
+    html += '<div class="grid-2">' +
       '<div><div class="card"><div class="detail-section">' +
       '<div class="detail-section-title">Datos del expediente</div>' +
       row('Numero', exp.numero) + row('Caratula', exp.caratula) + row('Juzgado', exp.juzgado) +
       row('Secretaria', exp.secretaria) + row('Fuero', exp.fuero) + row('Estado', Utils.statusLabel(exp.estado)) +
-      row('Etapa procesal', exp.etapaProcesal || '—') +
+      row('Etapa procesal', etapaActual || '—') +
       row('Inicio', Utils.formatDate(exp.fechaInicio)) + row('Proximo vencimiento', Utils.formatDate(exp.proximoVencimiento)) +
+      // Proyección 2026 — solo admin
+      row('Proyecci&oacute;n 2026', (exp.adminData && exp.adminData.goal_2026) || exp.proyeccion || '—') +
       '</div></div>' +
-      (isPro ? '<div class="card" style="margin-top:1rem"><div class="detail-section"><div class="detail-section-title">Datos del cliente</div>' +
-        row('Cliente', exp.clienteNombre) + row('Telefono', exp.clienteTelefono) +
-        '</div></div>' : '') +
+      '<div class="card" style="margin-top:1rem"><div class="detail-section"><div class="detail-section-title">Datos del cliente</div>' +
+      row('Cliente', exp.clienteNombre) +
+      row('Telefono', exp.clienteTelefono
+        ? exp.clienteTelefono + (waExpLink
+            ? ' <a href="' + waExpLink + '" target="_blank" style="margin-left:8px;display:inline-flex;align-items:center;gap:4px;background:#25D366;color:#fff;border-radius:4px;padding:2px 8px;font-size:.72rem;text-decoration:none">&#128362; WA</a>'
+            : '')
+        : '—') +
+      '</div></div>' +
       '</div>' +
+
       '<div>' +
       '<div class="card">' +
       '<div class="card-header"><h3 class="card-title">Actualizaciones</h3>' +
-      (isPro ? '<button class="btn btn-primary btn-sm" onclick="nuevaActualizacion(\'' + id + '\')">+ Agregar</button>' : '') +
+      '<button class="btn btn-primary btn-sm" onclick="nuevaActualizacion(\'' + id + '\')">+ Agregar</button>' +
       '</div>' +
       '<div class="card-body" id="actualizaciones-list">' + renderActualizaciones(exp.actualizaciones || []) + '</div>' +
       '</div>' +
       '</div>' +
-      '</div>' +
-      // Sección GAS: solo visible para profesional/administrador
-      (isPro
-        ? '<div id="gas-causas-section" style="margin-top:1rem">' +
-            '<div class="card"><div class="card-header"><h3 class="card-title">&#128204; Estado en seguimiento GAS</h3></div>' +
-            '<div class="card-body" id="gas-causas-body"><div class="spinner" style="margin:.5rem auto"></div></div>' +
-            '</div>' +
-          '</div>'
-        : '');
+      '</div>';
 
-    // Carga GAS sin bloquear el render principal (solo para profesional)
-    if (isPro) _loadGasCausas(exp);
+    // Sección GAS (solo admin)
+    html += '<div id="gas-causas-section" style="margin-top:1rem">' +
+              '<div class="card"><div class="card-header"><h3 class="card-title">&#128204; Estado en seguimiento GAS</h3></div>' +
+              '<div class="card-body" id="gas-causas-body"><div class="spinner" style="margin:.5rem auto"></div></div>' +
+              '</div>' +
+            '</div>';
+
+    container.innerHTML = html;
+
+    // Carga GAS sin bloquear el render principal
+    _loadGasCausas(exp);
 
   } catch(e) {
     container.innerHTML = '<p class="form-error">Error al cargar el expediente.</p>';

@@ -71,5 +71,59 @@ const API = {
     return db.collection('expedientes').doc(id).onSnapshot(snap => {
       if (snap.exists) callback(Object.assign({ id: snap.id }, snap.data()));
     });
+  },
+
+  // ── Sync desde Google Sheets via GAS ─────────────────────────
+  // Mapeo de columnas GAS → campos Firestore
+  // Solo campos permitidos para admin (proyeccion queda en adminData)
+  async syncFromSheets() {
+    var causas = await CausasAPI.fetchCausas();
+    if (!causas || !causas.length) throw new Error('No se obtuvieron datos del Sheet');
+
+    var batch    = db.batch();
+    var col      = db.collection('expedientes');
+    var upserted = 0;
+    var created  = 0;
+
+    for (var i = 0; i < causas.length; i++) {
+      var c = causas[i];
+      if (!c.caratula) continue;
+
+      // Buscar expediente existente por caratula (ID único funcional)
+      var snap = await col.where('caratula', '==', c.caratula).limit(1).get();
+
+      var payload = {
+        caratula:       c.caratula      || '',
+        court:          c.radicacion    || '',   // RADICACIÓN → court
+        start_date:     c.fechaInicio   || '',   // FECHA INICIO → start_date
+        tasks_notes:    c.tareas        || '',   // DETALLE TAREAS PENDIENTES → tasks_notes
+        etapaGAS:       c.etapa         || '',
+        detalleGAS:     c.detalle       || '',
+        _sheetName:     c._sheetName    || '',
+        adminData: {
+          goal_2026:    c.proyeccion    || '',   // PROYECCIÓN 2026 (solo admin)
+          etapa:        c.etapa         || '',
+          tareas:       c.tareas        || '',
+          detalle:      c.detalle       || ''
+        },
+        updatedAt: Utils.serverTimestamp(),
+        syncedAt:  Utils.serverTimestamp()
+      };
+
+      if (!snap.empty) {
+        batch.update(snap.docs[0].ref, payload);
+        upserted++;
+      } else {
+        var newRef = col.doc();
+        payload.createdAt      = Utils.serverTimestamp();
+        payload.actualizaciones = [];
+        payload.estado         = 'activo';
+        batch.set(newRef, payload);
+        created++;
+      }
+    }
+
+    await batch.commit();
+    return { upserted: upserted, created: created, total: upserted + created };
   }
 };
