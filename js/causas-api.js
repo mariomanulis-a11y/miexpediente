@@ -9,7 +9,7 @@
 var CausasAPI = (function () {
 
   // ── Configuración ──────────────────────────────────────────────
-  var GAS_URL   = 'TU_URL_DE_DEPLOY/?action=causas';
+  var GAS_URL   = 'https://script.google.com/macros/s/AKfycbxaMRNtHpfVs9wGHSpAdFUwitz8R8V59zyM4Q4NhP4Af2JHGqOzC5dCNdGX3Vn7p9GCEw/exec?action=causas';
   var CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
   var _cache     = null;
