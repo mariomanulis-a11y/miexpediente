@@ -333,11 +333,113 @@ Router.register('expediente-detalle', async function(container) {
       '<div class="card-body" id="actualizaciones-list">' + renderActualizaciones(exp.actualizaciones || []) + '</div>' +
       '</div>' +
       '</div>' +
+      '</div>' +
+      // Sección GAS: se rellena asincrónicamente después del render
+      '<div id="gas-causas-section" style="margin-top:1rem">' +
+        '<div class="card"><div class="card-header"><h3 class="card-title">&#128204; Estado en seguimiento GAS</h3></div>' +
+        '<div class="card-body" id="gas-causas-body"><div class="spinner" style="margin:.5rem auto"></div></div>' +
+        '</div>' +
       '</div>';
+
+    // Carga GAS sin bloquear el render principal
+    _loadGasCausas(exp);
+
   } catch(e) {
     container.innerHTML = '<p class="form-error">Error al cargar el expediente.</p>';
   }
 });
+
+// ── Carga asíncrona de datos GAS para la vista de detalle ───────
+async function _loadGasCausas(exp) {
+  var body = document.getElementById('gas-causas-body');
+  if (!body) return;
+  try {
+    // Busca por actora, luego por nombre de cliente, luego por carátula completa
+    var termino = exp.actora || exp.clienteNombre || exp.caratula || '';
+    var causas  = await CausasAPI.getCausasByCliente(termino);
+
+    if (!causas || !causas.length) {
+      body.innerHTML =
+        '<div class="empty-state" style="padding:1rem 0">' +
+        '<div class="empty-state-icon">&#128202;</div>' +
+        '<p class="empty-state-text">Sin causa vinculada en el seguimiento</p>' +
+        '<p class="empty-state-sub" style="font-size:.78rem">' +
+          'Verificá que la carátula en GAS contenga &ldquo;' +
+          Utils.truncate(termino, 35) + '&rdquo;' +
+        '</p></div>';
+      return;
+    }
+
+    // Si hay más de una coincidencia, tomar la primera
+    var c      = causas[0];
+    var etapa  = CausasAPI.formatEtapa(c);
+    // Primer paso pendiente: primera línea no vacía de tareas
+    var paso   = (c.tareas || '').split('\n')
+                   .map(function(l){ return l.trim(); })
+                   .find(function(l){ return l.length > 0; }) || '—';
+
+    body.innerHTML =
+      '<div class="detail-section" style="padding:.25rem 0">' +
+
+        '<div class="detail-row">' +
+          '<div class="detail-key">Etapa actual</div>' +
+          '<div class="detail-val">' +
+            '<span class="badge" style="' +
+              'background:' + etapa.color + '1a;' +
+              'color:'      + etapa.color + ';' +
+              'border:1px solid ' + etapa.color + '55;' +
+              'font-size:.75rem;font-weight:600;letter-spacing:.4px' +
+            '">' + etapa.label + '</span>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="detail-row">' +
+          '<div class="detail-key">Último movimiento</div>' +
+          '<div class="detail-val" style="font-size:.85rem;color:var(--text-secondary);white-space:pre-line">' +
+            (c.detalle || '—') +
+          '</div>' +
+        '</div>' +
+
+        '<div class="detail-row">' +
+          '<div class="detail-key">Próximo paso</div>' +
+          '<div class="detail-val" style="font-size:.85rem">' + paso + '</div>' +
+        '</div>' +
+
+        (causas.length > 1
+          ? '<p style="font-size:.75rem;color:var(--text-muted);margin-top:.5rem">' +
+              '&#128712; ' + causas.length + ' causas vinculadas. Mostrando la primera.' +
+            '</p>'
+          : '') +
+
+      '</div>';
+
+  } catch (err) {
+    var b = document.getElementById('gas-causas-body');
+    if (!b) return;
+    var isCors = err.message && (
+      err.message.indexOf('CORS') >= 0 ||
+      err.message.indexOf('fetch') >= 0 ||
+      err.message.indexOf('Failed') >= 0 ||
+      err.message.indexOf('JSONP') >= 0
+    );
+    b.innerHTML =
+      '<div style="padding:.5rem 0">' +
+        '<p style="font-size:.82rem;color:var(--text-muted)">' +
+          '&#9888; No se pudo conectar con el seguimiento GAS.' +
+        '</p>' +
+        (isCors
+          ? '<p style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem">' +
+              'Error de CORS. Soluci&oacute;n: redeploy&aacute; la Web App con acceso ' +
+              '<strong>"Cualquiera"</strong> en lugar de "Solo yo", ' +
+              'o verific&aacute; que <code>doGet</code> soporte el par&aacute;metro ' +
+              '<code>callback</code> para JSONP.' +
+            '</p>'
+          : '<p style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem">' +
+              err.message +
+            '</p>') +
+      '</div>';
+  }
+}
 
 function row(k, v) {
   return '<div class="detail-row"><div class="detail-key">' + k + '</div><div class="detail-val">' + (v || '—') + '</div></div>';
