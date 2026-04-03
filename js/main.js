@@ -314,11 +314,13 @@ Router.register('expediente-detalle', async function(container) {
         '<button class="btn btn-danger btn-sm" onclick="confirmarEliminar(\'' + id + '\')">&#128465; Eliminar</button>' +
         '</div>' : '') +
       '</div>' +
+      Views.etapaPanel(exp.fuero, exp.etapaProcesal) +
       '<div class="grid-2">' +
       '<div><div class="card"><div class="detail-section">' +
       '<div class="detail-section-title">Datos del expediente</div>' +
       row('Numero', exp.numero) + row('Caratula', exp.caratula) + row('Juzgado', exp.juzgado) +
       row('Secretaria', exp.secretaria) + row('Fuero', exp.fuero) + row('Estado', Utils.statusLabel(exp.estado)) +
+      row('Etapa procesal', exp.etapaProcesal || '—') +
       row('Inicio', Utils.formatDate(exp.fechaInicio)) + row('Proximo vencimiento', Utils.formatDate(exp.proximoVencimiento)) +
       '</div></div>' +
       (isPro ? '<div class="card" style="margin-top:1rem"><div class="detail-section"><div class="detail-section-title">Datos del cliente</div>' +
@@ -566,6 +568,7 @@ async function guardarExpediente(editId) {
     juzgado: (document.getElementById('exp-juzgado') || {}).value || '',
     secretaria: (document.getElementById('exp-secretaria') || {}).value || '',
     fuero: (document.getElementById('exp-fuero') || {}).value || '',
+    etapaProcesal: (document.getElementById('exp-etapa') || document.getElementById('nexp-etapa') || {}).value || '',
     estado: (document.getElementById('exp-estado') || {}).value || 'activo',
     fechaInicio: (document.getElementById('exp-inicio') || {}).value || '',
     proximoVencimiento: (document.getElementById('exp-vencimiento') || {}).value || '',

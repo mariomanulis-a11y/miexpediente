@@ -320,16 +320,38 @@ document.getElementById('password').addEventListener('keydown',function(e){if(e.
       </div>
       <div class="form-group">
         <label class="form-label">Fuero</label>
-        <select id="nexp-fuero" class="form-select">
+        <select id="nexp-fuero" class="form-select" onchange="Views._onFueroChange(this.value)">
           <option value="">Seleccionar...</option>
-          <option value="Laboral">Laboral</option>
-          <option value="Civil y Comercial">Civil y Comercial</option>
+          <option value="Civil y Comercial PBA">Civil y Comercial PBA</option>
+          <option value="Laboral PBA">Laboral PBA (Ley 11.653 / 15.057)</option>
+          <option value="Laboral Nación">Laboral Nación (Ley 18.345)</option>
           <option value="Penal">Penal</option>
           <option value="Familia">Familia</option>
           <option value="Contencioso Administrativo">Contencioso Administrativo</option>
         </select>
       </div>
     </div>
+
+    <div id="nexp-etapa-wrap" style="display:none">
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Etapa procesal actual</label>
+          <select id="nexp-etapa" class="form-select" onchange="Views._onEtapaChange()">
+            <option value="">Seleccionar etapa...</option>
+          </select>
+        </div>
+        <div class="form-group" style="align-self:flex-end">
+          <input id="nexp-etapa-libre" class="form-input" type="text"
+                 placeholder="O escribí algo libre (ej: pericia contable)..."
+                 oninput="Views._onTextoLibre(this.value)">
+        </div>
+      </div>
+      <div id="nexp-etapa-info" style="display:none;background:var(--bg-subtle,#f8fafc);border:1px solid var(--border-color,#e2e8f0);border-radius:6px;padding:12px;margin-bottom:1rem;font-size:.85rem">
+        <div id="nexp-etapa-def" style="color:var(--text-secondary);margin-bottom:8px"></div>
+        <div id="nexp-etapa-checklist"></div>
+      </div>
+    </div>
+
     <div class="grid-2">
       <div class="form-group">
         <label class="form-label">Actora</label>
@@ -367,6 +389,89 @@ document.getElementById('password').addEventListener('keydown',function(e){if(e.
     </div>
   </div>
 </div>`;
+  },
+
+  // ── HELPERS MOTOR DE ETAPAS (formulario nuevo expediente) ────
+  _onFueroChange(fuero) {
+    var wrap   = document.getElementById('nexp-etapa-wrap');
+    var select = document.getElementById('nexp-etapa');
+    var info   = document.getElementById('nexp-etapa-info');
+    if (!wrap || !select) return;
+
+    var etapas = EtapasProcesales.getEtapas(fuero);
+    if (!etapas.length) { wrap.style.display = 'none'; return; }
+
+    wrap.style.display = '';
+    info.style.display = 'none';
+    select.innerHTML   = '<option value="">Seleccionar etapa...</option>' +
+      etapas.map(function (e) {
+        return '<option value="' + e.nombre + '">' + e.id + '. ' + e.nombre + '</option>';
+      }).join('');
+  },
+
+  _onEtapaChange() {
+    var fuero  = (document.getElementById('nexp-fuero')  || {}).value;
+    var etapa  = (document.getElementById('nexp-etapa')  || {}).value;
+    var libre  = document.getElementById('nexp-etapa-libre');
+    if (libre) libre.value = '';
+    this._mostrarInfoEtapa(fuero, etapa);
+  },
+
+  _onTextoLibre(texto) {
+    var fuero  = (document.getElementById('nexp-fuero') || {}).value;
+    var select = document.getElementById('nexp-etapa');
+    if (!fuero || !texto.trim()) return;
+    var sugerida = EtapasProcesales.clasificar(fuero, texto);
+    if (sugerida) {
+      if (select) select.value = sugerida.nombre;
+      this._mostrarInfoEtapa(fuero, sugerida.nombre);
+    }
+  },
+
+  _mostrarInfoEtapa(fuero, etapaNombre) {
+    var info   = document.getElementById('nexp-etapa-info');
+    var defEl  = document.getElementById('nexp-etapa-def');
+    var listEl = document.getElementById('nexp-etapa-checklist');
+    if (!info || !etapaNombre) { if (info) info.style.display = 'none'; return; }
+
+    var data = EtapasProcesales.getInfo(fuero, etapaNombre);
+    if (!data) { info.style.display = 'none'; return; }
+
+    var meta = EtapasProcesales.getMeta(fuero);
+    defEl.innerHTML  = '<strong style="color:' + meta.color + '">' + data.nombre + '</strong> — ' + data.definicion;
+    listEl.innerHTML = data.pendientes.length
+      ? '<div style="margin-top:6px;font-size:.78rem;color:#6b7280">Pasos restantes hasta <strong>' + data.hito + '</strong>:</div>' +
+        '<ol style="margin:.4rem 0 0 1.2rem;font-size:.78rem;color:#374151">' +
+        data.pendientes.map(function (p) { return '<li>' + p + '</li>'; }).join('') + '</ol>'
+      : '<div style="margin-top:4px;font-size:.78rem;color:#16a34a">&#10003; Hito final alcanzado: ' + data.hito + '</div>';
+
+    info.style.display = '';
+  },
+
+  // ── PANEL ETAPA PROCESAL (vista detalle) ──────────────────────
+  etapaPanel(fuero, etapaNombre) {
+    if (!fuero || !etapaNombre) return '';
+    var data = EtapasProcesales.getInfo(fuero, etapaNombre);
+    if (!data) return '';
+    var meta = EtapasProcesales.getMeta(fuero);
+
+    var checklist = data.pendientes.length
+      ? '<div style="margin-top:.5rem;font-size:.78rem;color:var(--text-muted)">Pasos restantes hasta <strong>' + data.hito + '</strong>:</div>' +
+        '<ol style="margin:.35rem 0 0 1.1rem;font-size:.8rem;line-height:1.7">' +
+        data.pendientes.map(function (p) { return '<li>' + p + '</li>'; }).join('') + '</ol>'
+      : '<div style="margin-top:.35rem;font-size:.8rem;color:#16a34a;font-weight:600">&#10003; Hito final alcanzado: ' + data.hito + '</div>';
+
+    return '<div class="card" style="margin-bottom:1rem;border-left:3px solid ' + meta.color + '">' +
+      '<div style="padding:.75rem 1rem">' +
+      '<div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem">' +
+      '<span style="font-size:.62rem;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted)">Etapa procesal</span>' +
+      '<span style="background:' + meta.color + '18;color:' + meta.color + ';border:1px solid ' + meta.color + '44;' +
+        'border-radius:12px;padding:2px 10px;font-size:.72rem;font-weight:600">' + data.nombre + '</span>' +
+      '<span style="font-size:.65rem;color:var(--text-muted);margin-left:auto">' + meta.ley + '</span>' +
+      '</div>' +
+      '<div style="font-size:.83rem;color:var(--text-secondary)">' + data.definicion + '</div>' +
+      checklist +
+      '</div></div>';
   },
 
   // ── CONFIGURACIÓN ────────────────────────────────────────────
