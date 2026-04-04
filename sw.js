@@ -1,4 +1,4 @@
-const CACHE_NAME = 'miexpediente-v3';
+const CACHE_NAME = 'miexpediente-v4';
 
 // Base path dinámica: funciona tanto en GitHub Pages (/miexpediente/)
 // como en dominio propio (/)
@@ -50,8 +50,12 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
 
+  // No interceptar requests a dominios externos (GAS, Firebase, gstatic, etc.)
+  // Solo cachear archivos propios de la app
+  const reqUrl = new URL(e.request.url);
+  if (reqUrl.hostname !== self.location.hostname) return;
+
   // Para navegación (abre desde ícono del escritorio): siempre servir index.html
-  // Esto evita el 404 cuando el SO intenta cargar la URL guardada en el manifest
   if (e.request.mode === 'navigate') {
     e.respondWith(
       caches.match(BASE + 'index.html').then(cached => {
@@ -61,7 +65,7 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Para CSS, JS, imágenes: cache-first, actualiza en red
+  // Para CSS, JS, imágenes propias: cache-first, actualiza en red
   e.respondWith(
     caches.match(e.request).then(cached => {
       const network = fetch(e.request).then(res => {
