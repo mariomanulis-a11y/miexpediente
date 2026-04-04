@@ -242,49 +242,154 @@ Router.register('expedientes', async function(container) {
   container.className = 'view-container fade-in';
   renderHeader(); renderSidebar();
   const isPro = Store.isProfesional();
+
   container.innerHTML =
     '<div class="page-header"><div><h1 class="page-title">Expedientes</h1></div>' +
     (isPro ? '<div class="page-actions"><button class="btn btn-primary" onclick="Router.go(\'nuevo-expediente\')">+ Nuevo</button></div>' : '') +
     '</div>' +
-    '<div class="search-bar"><input class="form-input" id="search-input" placeholder="Buscar por caratula, numero..." oninput="filterExps()" style="flex:1;max-width:360px">' +
-    '<div class="filter-chips" id="chips">' +
+
+    // ── Barra de búsqueda ──
+    '<div class="search-bar" style="flex-wrap:wrap;gap:.5rem">' +
+    '<input class="form-input" id="search-input" placeholder="Buscar por carátula, número..." oninput="_expFilter()" style="flex:1;min-width:200px;max-width:340px">' +
+    '</div>' +
+
+    // ── Filtros dinámicos ──
+    '<div id="exp-filters" style="display:flex;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem;align-items:flex-start">' +
+
+    // Estado (chips fijos)
+    '<div>' +
+    '<div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:5px">Estado</div>' +
+    '<div class="filter-chips" id="chips-estado">' +
     '<span class="chip active" data-s="">Todos</span>' +
     '<span class="chip" data-s="activo">Activo</span>' +
     '<span class="chip" data-s="urgente">Urgente</span>' +
     '<span class="chip" data-s="suspendido">Suspendido</span>' +
     '<span class="chip" data-s="archivado">Archivado</span>' +
     '</div></div>' +
+
+    // Fuero (se puebla dinámicamente)
+    '<div>' +
+    '<div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:5px">Fuero</div>' +
+    '<select id="filter-fuero" class="form-select" style="min-width:180px;font-size:.82rem" onchange="_expFilter()">' +
+    '<option value="">Todos los fueros</option>' +
+    '</select></div>' +
+
+    // Departamento judicial (dinámico)
+    '<div>' +
+    '<div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:5px">Departamento judicial</div>' +
+    '<select id="filter-dept" class="form-select" style="min-width:180px;font-size:.82rem" onchange="_expFilter()">' +
+    '<option value="">Todos</option>' +
+    '</select></div>' +
+
+    // Etapa (dinámica)
+    '<div>' +
+    '<div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:5px">Etapa procesal</div>' +
+    '<select id="filter-etapa" class="form-select" style="min-width:180px;font-size:.82rem" onchange="_expFilter()">' +
+    '<option value="">Todas las etapas</option>' +
+    '</select></div>' +
+
+    // Botón limpiar
+    '<div style="align-self:flex-end">' +
+    '<button class="btn btn-ghost btn-sm" onclick="_expClearFilters()" id="btn-clear-filters" style="display:none">✕ Limpiar filtros</button>' +
+    '</div>' +
+
+    '</div>' + // /exp-filters
+
+    '<div id="exp-count" style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem"></div>' +
     '<div id="exp-list"><div class="spinner"></div></div>';
 
-  let allExps = [];
-  document.getElementById('chips').addEventListener('click', function(e) {
-    if (e.target.dataset.s === undefined) return;
-    Utils.$$('.chip', document.getElementById('chips')).forEach(function(c) { c.classList.remove('active'); });
-    e.target.classList.add('active');
-    renderExps();
+  // Chips de estado
+  document.getElementById('chips-estado').addEventListener('click', function(ev) {
+    if (ev.target.dataset.s === undefined) return;
+    document.querySelectorAll('#chips-estado .chip').forEach(function(c) { c.classList.remove('active'); });
+    ev.target.classList.add('active');
+    _expFilter();
   });
 
-  window.filterExps = renderExps;
-  window.renderExps = renderExps;
+  let allExps = [];
 
-  function renderExps() {
-    const q = (document.getElementById('search-input').value || '').toLowerCase();
-    const s = (document.querySelector('.chip.active') || {}).dataset.s || '';
-    let list = allExps;
-    if (s) list = list.filter(function(e) { return e.estado === s; });
-    if (q) list = list.filter(function(e) { return ((e.caratula || '') + ' ' + (e.numero || '')).toLowerCase().includes(q); });
-    const el = document.getElementById('exp-list');
+  // Puebla los selects con valores únicos de los datos
+  function _buildSelects() {
+    var fueros  = {};
+    var depts   = {};
+    var etapas  = {};
+
+    allExps.forEach(function(e) {
+      var f = _normFuero(e.fuero);
+      var d = (e.juzgado || e._sheetName || '').trim();
+      var et = (e.etapaProcesal || e.etapaGAS || '').trim();
+      if (f && f !== 'Sin especificar') fueros[f]  = true;
+      if (d)                            depts[d]   = true;
+      if (et)                           etapas[et] = true;
+    });
+
+    var selF = document.getElementById('filter-fuero');
+    var selD = document.getElementById('filter-dept');
+    var selE = document.getElementById('filter-etapa');
+
+    Object.keys(fueros).sort().forEach(function(v) {
+      selF.innerHTML += '<option value="' + v + '">' + v + '</option>';
+    });
+    Object.keys(depts).sort().forEach(function(v) {
+      selD.innerHTML += '<option value="' + v + '">' + v + '</option>';
+    });
+    Object.keys(etapas).sort().forEach(function(v) {
+      selE.innerHTML += '<option value="' + v + '">' + v + '</option>';
+    });
+  }
+
+  window._expFilter = function() {
+    var q     = (document.getElementById('search-input').value || '').toLowerCase().trim();
+    var s     = (document.querySelector('#chips-estado .chip.active') || {}).dataset.s || '';
+    var fuero = (document.getElementById('filter-fuero') || {}).value || '';
+    var dept  = (document.getElementById('filter-dept')  || {}).value || '';
+    var etapa = (document.getElementById('filter-etapa') || {}).value || '';
+
+    var dirty = q || s || fuero || dept || etapa;
+    var btn = document.getElementById('btn-clear-filters');
+    if (btn) btn.style.display = dirty ? '' : 'none';
+
+    var list = allExps.filter(function(e) {
+      if (s && e.estado !== s) return false;
+      if (fuero && _normFuero(e.fuero) !== fuero) return false;
+      if (dept) {
+        var ed = (e.juzgado || e._sheetName || '').trim();
+        if (ed !== dept) return false;
+      }
+      if (etapa) {
+        var ee = (e.etapaProcesal || e.etapaGAS || '').trim();
+        if (ee !== etapa) return false;
+      }
+      if (q && !((e.caratula || '') + ' ' + (e.numero || '') + ' ' + (e.court || '')).toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    var cnt = document.getElementById('exp-count');
+    if (cnt) cnt.textContent = list.length + ' expediente' + (list.length !== 1 ? 's' : '') + (dirty ? ' (filtrado)' : '');
+
+    var el = document.getElementById('exp-list');
     if (!list.length) {
-      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📂</div><p class="empty-state-text">Sin resultados</p></div>';
+      el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📂</div><p class="empty-state-text">Sin resultados para los filtros aplicados</p></div>';
     } else {
       el.innerHTML = '<div class="grid-2">' + list.map(function(e) { return renderExpCard(e); }).join('') + '</div>';
     }
-  }
+  };
+
+  window._expClearFilters = function() {
+    document.getElementById('search-input').value = '';
+    document.getElementById('filter-fuero').value = '';
+    document.getElementById('filter-dept').value  = '';
+    document.getElementById('filter-etapa').value = '';
+    document.querySelectorAll('#chips-estado .chip').forEach(function(c) { c.classList.remove('active'); });
+    document.querySelector('#chips-estado .chip').classList.add('active');
+    _expFilter();
+  };
 
   try {
     allExps = await API.getExpedientes();
     Store.setExpedientes(allExps);
-    renderExps();
+    _buildSelects();
+    _expFilter();
   } catch(err) {
     document.getElementById('exp-list').innerHTML = '<p class="form-error">Error al cargar expedientes.</p>';
   }
