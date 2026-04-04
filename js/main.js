@@ -618,7 +618,19 @@ Router.register('expediente-detalle', async function(container) {
   if (!id) { Router.go('expedientes'); return; }
   container.innerHTML = '<div class="spinner"></div>';
   try {
-    const exp = await API.getExpediente(id);
+    let exp = null;
+    if (Store.isCliente()) {
+      // Clientes: leer del store ya filtrado por clienteId para evitar errores de permisos Firestore
+      exp = (Store.getExpedientes() || []).find(function(e) { return e.id === id; }) || null;
+      if (!exp) {
+        // Si no está en store (acceso directo por URL), cargar lista filtrada
+        var clienteList = await API.getExpedientes();
+        Store.setExpedientes(clienteList);
+        exp = clienteList.find(function(e) { return e.id === id; }) || null;
+      }
+    } else {
+      exp = await API.getExpediente(id);
+    }
     if (!exp) { container.innerHTML = '<p class="form-error">Expediente no encontrado.</p>'; return; }
     Store.setCurrent(exp);
     const isPro = Store.isProfesional();

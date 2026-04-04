@@ -127,6 +127,7 @@ const API = {
         start_date:       c.fechaInicio   || '',   // FECHA INICIO
         fechaInicio:      c.fechaInicio   || '',   // alias para compatibilidad
         juzgado:          c.juzgado       || '',   // JUZGADO/TRIBUNAL
+        secretaria:       c.secretaria    || '',   // SECRETARÍA
         fuero:            c.fuero         || '',   // FUERO/JURISDICCIÓN
         tasks_notes:      c.tareas        || '',   // TAREAS PENDIENTES
         observaciones:    c.detalle       || '',   // DETALLE → observaciones
