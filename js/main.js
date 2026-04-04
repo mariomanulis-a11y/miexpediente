@@ -803,27 +803,11 @@ async function _loadGasCausas(exp) {
   } catch (err) {
     var b = document.getElementById('gas-causas-body');
     if (!b) return;
-    var isCors = err.message && (
-      err.message.indexOf('CORS') >= 0 ||
-      err.message.indexOf('fetch') >= 0 ||
-      err.message.indexOf('Failed') >= 0 ||
-      err.message.indexOf('JSONP') >= 0
-    );
     b.innerHTML =
       '<div style="padding:.5rem 0">' +
         '<p style="font-size:.82rem;color:var(--text-muted)">' +
-          '&#9888; No se pudo conectar con el seguimiento GAS.' +
+          '&#128202; Datos de seguimiento no disponibles. Usá "Sincronizar desde Sheet" para actualizar.' +
         '</p>' +
-        (isCors
-          ? '<p style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem">' +
-              'Error de CORS. Soluci&oacute;n: redeploy&aacute; la Web App con acceso ' +
-              '<strong>"Cualquiera"</strong> en lugar de "Solo yo", ' +
-              'o verific&aacute; que <code>doGet</code> soporte el par&aacute;metro ' +
-              '<code>callback</code> para JSONP.' +
-            '</p>'
-          : '<p style="font-size:.78rem;color:var(--text-muted);margin-top:.35rem">' +
-              err.message +
-            '</p>') +
       '</div>';
   }
 }

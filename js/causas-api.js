@@ -80,32 +80,25 @@ var CausasAPI = (function () {
     });
   }
 
-  // ── _fetchRaw: fetch → XHR → JSONP ────────────────────────────
+  // ── _fetchRaw: fetch → XHR (proxy Cloudflare, sin JSONP) ────────
   async function _fetchRaw() {
     var baseUrl = GAS_URL.split('?')[0];
     var t       = Date.now();
 
-    // Intento 1: fetch (desktop Chrome/Firefox)
+    // Intento 1: fetch
     try {
       var res = await fetch(baseUrl + '?action=causas&t=' + t,
                             { method: 'GET', credentials: 'omit', redirect: 'follow' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var text = await res.text();
-      if (text.trim().startsWith('<')) throw new Error('HTML');
+      if (text.trim().startsWith('<')) throw new Error('HTML — proxy no accesible');
       return JSON.parse(text);
     } catch(e1) {
       console.warn('[CausasAPI] fetch falló:', e1.message);
     }
 
-    // Intento 2: XHR (iOS Safari — mejor compatibilidad con redirects)
-    try {
-      return await xhrFetch(baseUrl + '?action=causas&t=' + (t + 1));
-    } catch(e2) {
-      console.warn('[CausasAPI] XHR falló:', e2.message);
-    }
-
-    // Intento 3: JSONP
-    return jsonpFetch(baseUrl + '?action=causas&t=' + (t + 2));
+    // Intento 2: XHR
+    return xhrFetch(baseUrl + '?action=causas&t=' + (t + 1));
   }
 
   // ── fetchCausas: devuelve array plano de causas (con caché) ───
@@ -181,10 +174,7 @@ var CausasAPI = (function () {
       if (text.trim().startsWith('<')) throw new Error('HTML');
       return JSON.parse(text);
     } catch(e1) {}
-    try {
-      return await xhrFetch(baseUrl + '?action=diagnostico&t=' + (t + 1));
-    } catch(e2) {}
-    return jsonpFetch(baseUrl + '?action=diagnostico&t=' + (t + 2));
+    return xhrFetch(baseUrl + '?action=diagnostico&t=' + (t + 1));
   }
 
   // ── API pública ────────────────────────────────────────────────
