@@ -93,23 +93,42 @@ const API = {
       var snap = await col.where('caratula', '==', c.caratula).limit(1).get();
 
       var payload = {
-        caratula:       c.caratula      || '',
-        court:          c.radicacion    || '',   // RADICACIÓN → court
-        start_date:     c.fechaInicio   || '',   // FECHA INICIO → start_date
-        tasks_notes:    c.tareas        || '',   // DETALLE TAREAS PENDIENTES → tasks_notes
-        etapaGAS:       c.etapa         || '',
-        etapaProcesal:  c.etapa         || '',   // también sincroniza el campo editable
-        detalleGAS:     c.detalle       || '',
-        _sheetName:     c._sheetName    || '',
+        // Datos principales (visibles para admin y cliente)
+        caratula:         c.caratula      || '',
+        numero:           c.radicacion    || '',   // RADICACIÓN → numero/expediente
+        court:            c.radicacion    || '',
+        start_date:       c.fechaInicio   || '',   // FECHA INICIO
+        fechaInicio:      c.fechaInicio   || '',   // alias para compatibilidad
+        juzgado:          c.juzgado       || '',   // JUZGADO/TRIBUNAL
+        fuero:            c.fuero         || '',   // FUERO/JURISDICCIÓN
+        tasks_notes:      c.tareas        || '',   // TAREAS PENDIENTES
+        observaciones:    c.detalle       || '',   // DETALLE → observaciones
+        // Datos de tracking GAS
+        etapaGAS:         c.etapa         || '',   // etapa interna del Sheet
+        detalleGAS:       c.detalle       || '',
+        _sheetName:       c._sheetName    || '',
+        // Contacto cliente (si el Sheet lo tiene)
+        clienteTelefono:  c.telefono      || '',
+        // Datos solo admin (proyección, etc.)
         adminData: {
-          goal_2026:    c.proyeccion    || '',   // PROYECCIÓN 2026 (solo admin)
-          etapa:        c.etapa         || '',
-          tareas:       c.tareas        || '',
-          detalle:      c.detalle       || ''
+          goal_2026:      c.proyeccion    || '',   // PROYECCIÓN 2026
+          etapa:          c.etapa         || '',
+          tareas:         c.tareas        || '',
+          detalle:        c.detalle       || '',
+          radicacion:     c.radicacion    || ''
         },
         updatedAt: Utils.serverTimestamp(),
         syncedAt:  Utils.serverTimestamp()
       };
+      // Solo sobreescribir etapaProcesal si no fue seteada manualmente
+      // (si viene del Sheet como "HACER PRUEBA", no matchea EtapasProcesales —
+      //  el admin puede corregirla manualmente desde el form de edición)
+      if (!snap.empty) {
+        var existing = snap.docs[0].data();
+        if (!existing.etapaProcesal) payload.etapaProcesal = c.etapa || '';
+      } else {
+        payload.etapaProcesal = c.etapa || '';
+      }
 
       if (!snap.empty) {
         batch.update(snap.docs[0].ref, payload);
