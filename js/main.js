@@ -113,9 +113,11 @@ function renderSidebar() {
     html += '<div class="sidebar-label">Herramientas</div>';
     html += link('reportes', '📊', 'Reportes &amp; Auditoría');
     html += link('calendario', '📅', 'Calendario');
-    html += '<div style="padding:6px 12px">' +
+    html += '<div style="padding:6px 12px;display:flex;flex-direction:column;gap:4px">' +
             '<button id="sync-btn" class="btn-sync" onclick="syncDesdeSheets()" style="width:100%">' +
-            '&#8635; Sincronizar desde Sheet</button></div>';
+            '&#8635; Sincronizar desde Sheet</button>' +
+            '<button class="btn-sync" onclick="verificarSync()" style="width:100%;font-size:.72rem">' +
+            '&#128202; Verificar columnas GAS</button></div>';
   }
   html += '<div class="sidebar-label">Cuenta</div>';
   html += link('perfil', '👤', 'Mi Perfil');
@@ -139,11 +141,37 @@ async function syncDesdeSheets() {
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Sincronizando...'; }
   try {
     var result = await API.syncFromSheets();
-    toast('Sincronizado: ' + result.created + ' nuevos, ' + result.upserted + ' actualizados', 'success', 5000);
+    var msg = '✅ Sincronizado: ' + result.created + ' nuevos, ' + result.upserted + ' actualizados';
+    toast(msg, 'success', 6000);
+    // Refresca lista si estamos en expedientes
+    if (Router.current() === 'expedientes') Router.go('expedientes');
+    if (Router.current() === 'dashboard')   Router.go('dashboard');
   } catch(e) {
     toast('Error al sincronizar: ' + (e.message || 'Sin conexión al Sheet'), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '↻ Sincronizar desde Sheet'; }
+  }
+}
+
+async function verificarSync() {
+  try {
+    var diag = await CausasAPI.getDiagnostico();
+    if (!diag || diag.error) throw new Error(diag ? diag.error : 'Sin respuesta');
+    var h = '<div class="modal-header"><h3 class="modal-title">Diagnóstico de columnas GAS</h3>' +
+            '<button class="modal-close" onclick="closeModal()">&#x2715;</button></div>' +
+            '<div style="max-height:60vh;overflow-y:auto">';
+    diag.forEach(function(p) {
+      h += '<div style="margin-bottom:1rem"><strong>' + p.pestana + '</strong> — ' + p.filas + ' filas<br>' +
+           '<span style="font-size:.78rem;color:var(--text-muted)">Mapeados: ' + p.mapeados.join(', ') + '</span>';
+      if (p.sinMapear && p.sinMapear.length) {
+        h += '<br><span style="font-size:.75rem;color:#ef4444">Sin mapear: ' + p.sinMapear.join(', ') + '</span>';
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+    showModal(h);
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
   }
 }
 
@@ -389,8 +417,8 @@ Router.register('expedientes', async function(container) {
     var etapas  = {};
 
     allExps.forEach(function(e) {
-      var f = _normFuero(e.fuero);
-      var d = (e.juzgado || e._sheetName || '').trim();
+      var f  = _normFuero(e.fuero);
+      var d  = (e.departamento || e._sheetName || '').trim();
       var et = (e.etapaProcesal || e.etapaGAS || '').trim();
       if (f && f !== 'Sin especificar') fueros[f]  = true;
       if (d)                            depts[d]   = true;
@@ -427,7 +455,7 @@ Router.register('expedientes', async function(container) {
       if (s && e.estado !== s) return false;
       if (fuero && _normFuero(e.fuero) !== fuero) return false;
       if (dept) {
-        var ed = (e.juzgado || e._sheetName || '').trim();
+        var ed = (e.departamento || e._sheetName || '').trim();
         if (ed !== dept) return false;
       }
       if (etapa) {

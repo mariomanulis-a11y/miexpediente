@@ -130,12 +130,25 @@ var CausasAPI = (function () {
   // ── Configurar la URL en runtime (útil para diferentes entornos) ─
   function setUrl(url) { GAS_URL = url; _cache = null; _cacheTime = 0; }
 
+  // ── getDiagnostico: retorna info de columnas reconocidas por pestaña ─
+  async function getDiagnostico() {
+    var baseUrl = GAS_URL.replace('?action=causas', '');
+    try {
+      var res = await fetch(baseUrl + '?action=diagnostico', { redirect: 'follow' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) {
+      return jsonpFetch(baseUrl + '?action=diagnostico');
+    }
+  }
+
   // ── API pública ────────────────────────────────────────────────
   return {
     fetchCausas:          fetchCausas,
     getCausasByCliente:   getCausasByCliente,
     formatEtapa:          formatEtapa,
     setUrl:               setUrl,
+    getDiagnostico:       getDiagnostico,
     invalidateCache:      function () { _cache = null; _cacheTime = 0; }
   };
 

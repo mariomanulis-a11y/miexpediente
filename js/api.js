@@ -130,6 +130,11 @@ const API = {
         fuero:            c.fuero         || '',   // FUERO/JURISDICCIÓN
         tasks_notes:      c.tareas        || '',   // TAREAS PENDIENTES
         observaciones:    c.detalle       || '',   // DETALLE → observaciones
+        // Departamento judicial (columna o nombre de pestaña como fallback)
+        departamento:     c.departamento  || c._sheetName || '',
+        // Partes
+        actora:           c.actora        || '',
+        demandada:        c.demandada     || '',
         // Datos de tracking GAS
         etapaGAS:         c.etapa         || '',   // etapa interna del Sheet
         detalleGAS:       c.detalle       || '',
