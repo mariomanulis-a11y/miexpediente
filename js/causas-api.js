@@ -27,49 +27,51 @@ var CausasAPI = (function () {
     { keys: ['CONCILIAR'],                 label: 'Conciliar',         color: '#14b8a6' }
   ];
 
-  // ── fetch robusto: 3 intentos sin JSONP ──────────────────────
+  // ── JSONP helper (funciona en iOS Safari donde fetch falla por CORS/redirect) ──
+  function jsonpFetch(url) {
+    return new Promise(function(resolve, reject) {
+      var cbName = '__gasCb_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
+      var script = document.createElement('script');
+      var timer  = setTimeout(function() {
+        cleanup();
+        reject(new Error('Timeout (12s) — GAS no respondió'));
+      }, 12000);
+
+      function cleanup() {
+        clearTimeout(timer);
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }
+
+      window[cbName] = function(data) { cleanup(); resolve(data); };
+      script.onerror = function() {
+        cleanup();
+        reject(new Error('No se pudo cargar el script de GAS — verificá conexión'));
+      };
+      var sep = url.indexOf('?') >= 0 ? '&' : '?';
+      script.src = url + sep + 'callback=' + cbName;
+      document.head.appendChild(script);
+    });
+  }
+
+  // ── fetch con fallback a JSONP (para iOS Safari) ──────────────
   async function _fetchRaw() {
     var baseUrl = GAS_URL.split('?')[0];
     var url     = baseUrl + '?action=causas&t=' + Date.now();
-    var lastErr = null;
 
-    // Intento 1: fetch con credentials omit (evita redirect a login de Google)
+    // Intento 1: fetch estándar (Android Chrome, desktop)
     try {
       var res = await fetch(url, { method: 'GET', credentials: 'omit', redirect: 'follow' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var text = await res.text();
-      if (text.trim().startsWith('<')) throw new Error('respuesta HTML — deploy no público');
+      if (text.trim().startsWith('<')) throw new Error('GAS devolvió HTML');
       return JSON.parse(text);
     } catch (e1) {
-      lastErr = e1;
-      console.warn('[CausasAPI] intento 1 falló:', e1.message);
+      console.warn('[CausasAPI] fetch falló (' + e1.message + ') — reintentando con JSONP (iOS)');
     }
 
-    // Intento 2: fetch con mode cors explícito
-    try {
-      var res2 = await fetch(url, { method: 'GET', mode: 'cors', credentials: 'omit' });
-      if (!res2.ok) throw new Error('HTTP ' + res2.status);
-      var text2 = await res2.text();
-      if (text2.trim().startsWith('<')) throw new Error('respuesta HTML');
-      return JSON.parse(text2);
-    } catch (e2) {
-      lastErr = e2;
-      console.warn('[CausasAPI] intento 2 falló:', e2.message);
-    }
-
-    // Intento 3: fetch sin opciones extra
-    try {
-      var res3 = await fetch(baseUrl + '?action=causas');
-      if (!res3.ok) throw new Error('HTTP ' + res3.status);
-      var text3 = await res3.text();
-      if (text3.trim().startsWith('<')) throw new Error('respuesta HTML — deploy no público');
-      return JSON.parse(text3);
-    } catch (e3) {
-      lastErr = e3;
-      console.warn('[CausasAPI] intento 3 falló:', e3.message);
-    }
-
-    throw new Error('No se pudo conectar con GAS. Detalle: ' + (lastErr ? lastErr.message : 'error desconocido'));
+    // Intento 2: JSONP — funciona en iOS Safari y cualquier browser
+    return jsonpFetch(baseUrl + '?action=causas&t=' + Date.now());
   }
 
   // ── fetchCausas: devuelve array plano de causas (con caché) ───
@@ -137,11 +139,15 @@ var CausasAPI = (function () {
   async function getDiagnostico() {
     var baseUrl = GAS_URL.split('?')[0];
     var url     = baseUrl + '?action=diagnostico&t=' + Date.now();
-    var res = await fetch(url, { method: 'GET', credentials: 'omit', redirect: 'follow' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    var text = await res.text();
-    if (text.trim().startsWith('<')) throw new Error('GAS devolvió HTML — deploy no público');
-    return JSON.parse(text);
+    try {
+      var res = await fetch(url, { method: 'GET', credentials: 'omit', redirect: 'follow' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var text = await res.text();
+      if (text.trim().startsWith('<')) throw new Error('GAS devolvió HTML');
+      return JSON.parse(text);
+    } catch(e) {
+      return jsonpFetch(baseUrl + '?action=diagnostico&t=' + Date.now());
+    }
   }
 
   // ── API pública ────────────────────────────────────────────────
