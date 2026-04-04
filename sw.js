@@ -1,4 +1,4 @@
-const CACHE_NAME = 'miexpediente-v4';
+const CACHE_NAME = 'miexpediente-v5';
 
 // Base path dinámica: funciona tanto en GitHub Pages (/miexpediente/)
 // como en dominio propio (/)
@@ -65,7 +65,21 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Para CSS, JS, imágenes propias: cache-first, actualiza en red
+  // JS y CSS: network-first (siempre código actualizado), fallback a cache si offline
+  if (e.request.url.match(/\.(js|css)(\?.*)?$/)) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+        }
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Imágenes y otros: cache-first, actualiza en fondo
   e.respondWith(
     caches.match(e.request).then(cached => {
       const network = fetch(e.request).then(res => {
