@@ -44,7 +44,13 @@ var CausasAPI = (function () {
       }
 
       window[cbName] = function (data) { cleanup(); resolve(data); };
-      script.onerror = function () { cleanup(); reject(new Error('JSONP: error de red o URL incorrecta')); };
+      script.onerror = function () {
+        cleanup();
+        reject(new Error(
+          'GAS inaccesible. Verificá que el deploy tenga acceso "Cualquiera" (anónimo). ' +
+          'URL: ' + script.src.slice(0, 80) + '…'
+        ));
+      };
 
       var sep = url.indexOf('?') >= 0 ? '&' : '?';
       script.src = url + sep + 'callback=' + cbName;
