@@ -2,12 +2,25 @@ const API = {
   async getExpedientes(filtros) {
     filtros = filtros || {};
     let q = db.collection('expedientes');
-    if (Store.isCliente()) q = q.where('clienteId', '==', Store.getUser().clienteId);
-    if (filtros.estado) q = q.where('estado', '==', filtros.estado);
-    q = q.orderBy('updatedAt', 'desc');
+    if (Store.isCliente()) {
+      // Para clientes: solo filtrar por clienteId, sin orderBy
+      // (where + orderBy requiere índice compuesto que puede no existir)
+      q = q.where('clienteId', '==', Store.getUser().clienteId);
+    } else {
+      if (filtros.estado) q = q.where('estado', '==', filtros.estado);
+      q = q.orderBy('updatedAt', 'desc');
+    }
     try {
       const snap = await q.get();
-      const result = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      let result = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      // Ordenar client-side para clientes
+      if (Store.isCliente()) {
+        result.sort(function(a, b) {
+          var ta = a.updatedAt && a.updatedAt.seconds ? a.updatedAt.seconds : 0;
+          var tb = b.updatedAt && b.updatedAt.seconds ? b.updatedAt.seconds : 0;
+          return tb - ta;
+        });
+      }
       try {
         var cacheKey = '_mvc_exps_' + (Store.getUser() ? Store.getUser().uid : 'anon');
         localStorage.setItem(cacheKey, JSON.stringify(result));
