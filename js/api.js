@@ -5,8 +5,35 @@ const API = {
     if (Store.isCliente()) q = q.where('clienteId', '==', Store.getUser().clienteId);
     if (filtros.estado) q = q.where('estado', '==', filtros.estado);
     q = q.orderBy('updatedAt', 'desc');
-    const snap = await q.get();
-    return snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    try {
+      const snap = await q.get();
+      const result = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      try {
+        var cacheKey = '_mvc_exps_' + (Store.getUser() ? Store.getUser().uid : 'anon');
+        localStorage.setItem(cacheKey, JSON.stringify(result));
+        localStorage.removeItem('_mvc_offline');
+      } catch(e) {}
+      return result;
+    } catch(fetchErr) {
+      // Feature 8: fallback offline
+      try {
+        var cacheKey = '_mvc_exps_' + (Store.getUser() ? Store.getUser().uid : 'anon');
+        var cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          localStorage.setItem('_mvc_offline', '1');
+          var indicator = document.getElementById('offline-indicator');
+          if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'offline-indicator';
+            indicator.style.cssText = 'position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:#374151;color:#fff;padding:6px 16px;border-radius:20px;font-size:.78rem;z-index:9999';
+            indicator.textContent = '📴 Modo offline — datos del último acceso';
+            document.body.appendChild(indicator);
+          }
+          return JSON.parse(cached);
+        }
+      } catch(e2) {}
+      throw fetchErr;
+    }
   },
   async getExpediente(id) {
     const snap = await db.collection('expedientes').doc(id).get();

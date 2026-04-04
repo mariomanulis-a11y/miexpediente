@@ -37,11 +37,52 @@ function renderHeader() {
     '<a class="header-brand" href="#/dashboard">' +
     '<img src="assets/logo.svg" alt="MiExpediente">MiExpediente</a>' +
     '<div class="header-spacer"></div>' +
+    '<div class="header-search-wrap" id="header-search-wrap">' +
+    '<input class="header-search-input" id="header-search" type="search" placeholder="🔍 Buscar..." autocomplete="off" ' +
+    'oninput="_globalSearch(this.value)" onfocus="_globalSearch(this.value)">' +
+    '<div class="header-search-dropdown" id="header-search-dropdown" style="display:none"></div>' +
+    '</div>' +
     '<div class="header-actions">' +
     '<span class="header-user">' + (user.nombre || user.email) + '</span>' +
     '<button class="btn btn-ghost btn-sm" onclick="Auth.logout()" style="color:#fff;border-color:rgba(255,255,255,0.3)">Salir</button>' +
     '</div>';
   document.getElementById('hamburger-btn').onclick = toggleSidebar;
+  document.addEventListener('click', function _hsc(e) {
+    if (!e.target.closest('#header-search-wrap')) {
+      var dd = document.getElementById('header-search-dropdown');
+      if (dd) dd.style.display = 'none';
+    }
+  }, { once: false, capture: false });
+}
+
+// ── Búsqueda global ──────────────────────────────────────────
+function _globalSearch(q) {
+  var dd = document.getElementById('header-search-dropdown');
+  if (!dd) return;
+  q = (q || '').trim().toLowerCase();
+  if (!q) { dd.style.display = 'none'; return; }
+  var exps = Store.getExpedientes();
+  var hits = exps.filter(function(e) {
+    return ((e.caratula || '') + ' ' + (e.numero || '') + ' ' + (e.juzgado || '')).toLowerCase().indexOf(q) >= 0;
+  }).slice(0, 8);
+  if (!hits.length) {
+    dd.innerHTML = '<div class="hsd-empty">Sin resultados</div>';
+  } else {
+    dd.innerHTML = hits.map(function(e) {
+      return '<div class="hsd-item" onclick="_globalSearchGo(\'' + e.id + '\')">' +
+             '<div class="hsd-caratula">' + Utils.truncate(e.caratula, 45) + '</div>' +
+             '<div class="hsd-meta">' + (e.numero || 'S/N') + (e.fuero ? ' · ' + e.fuero : '') + '</div>' +
+             '</div>';
+    }).join('');
+  }
+  dd.style.display = 'block';
+}
+function _globalSearchGo(id) {
+  var dd = document.getElementById('header-search-dropdown');
+  var inp = document.getElementById('header-search');
+  if (dd) dd.style.display = 'none';
+  if (inp) inp.value = '';
+  Router.go('expediente-detalle', { id: id });
 }
 
 // ── Sidebar ──────────────────────────────────────────────────
@@ -71,6 +112,7 @@ function renderSidebar() {
     html += link('nuevo-expediente', '➕', 'Nuevo Expediente');
     html += '<div class="sidebar-label">Herramientas</div>';
     html += link('reportes', '📊', 'Reportes &amp; Auditoría');
+    html += link('calendario', '📅', 'Calendario');
     html += '<div style="padding:6px 12px">' +
             '<button id="sync-btn" class="btn-sync" onclick="syncDesdeSheets()" style="width:100%">' +
             '&#8635; Sincronizar desde Sheet</button></div>';
@@ -209,8 +251,9 @@ Router.register('dashboard', async function(container) {
   const isPro = user.rol === 'profesional';
   container.innerHTML = '<div class="page-header"><div><h1 class="page-title">Bienvenido, ' + (user.nombre || user.email) + '</h1><p class="page-subtitle">Panel de ' + (isPro ? 'profesional' : 'cliente') + '</p></div></div>' +
     '<div class="grid-4" id="stats-row"><div class="stat-card"><span class="stat-icon">📁</span><div><div class="stat-label">Expedientes</div><div class="stat-value" id="stat-exp">—</div></div></div>' +
-    (isPro ? '<div class="stat-card"><span class="stat-icon">👥</span><div><div class="stat-label">Clientes</div><div class="stat-value" id="stat-cli">—</div></div></div><div class="stat-card"><span class="stat-icon">🔴</span><div><div class="stat-label">Urgentes</div><div class="stat-value" id="stat-urg">—</div></div></div><div class="stat-card"><span class="stat-icon">✅</span><div><div class="stat-label">Activos</div><div class="stat-value" id="stat-act">—</div></div></div>' : '') +
+    (isPro ? '<div class="stat-card"><span class="stat-icon">👥</span><div><div class="stat-label">Clientes</div><div class="stat-value" id="stat-cli">—</div></div></div><div class="stat-card"><span class="stat-icon">🔴</span><div><div class="stat-label">Urgentes</div><div class="stat-value" id="stat-urg">—</div></div></div><div class="stat-card"><span class="stat-icon">✅</span><div><div class="stat-label">Activos</div><div class="stat-value" id="stat-act">—</div></div></div><div class="stat-card" style="cursor:pointer" onclick="Router.go(\'calendario\')"><span class="stat-icon">📅</span><div><div class="stat-label">Vencimientos 7d</div><div class="stat-value" id="stat-venc" style="color:#ef4444">—</div></div></div>' : '') +
     '</div>' +
+    (isPro ? '<div id="venc-alert-section" style="margin-top:1.25rem"></div>' : '') +
     '<div style="margin-top:1.5rem"><div class="card-header"><h2 class="card-title">Ultimas novedades</h2><button class="btn btn-primary btn-sm" onclick="Router.go(\'expedientes\')">Ver todos</button></div>' +
     '<div id="recent-list" style="margin-top:1rem"><div class="spinner"></div></div></div>';
 
@@ -224,6 +267,34 @@ Router.register('dashboard', async function(container) {
       document.getElementById('stat-cli').textContent = clis.length;
       document.getElementById('stat-urg').textContent = exps.filter(function(e) { return e.estado === 'urgente'; }).length;
       document.getElementById('stat-act').textContent = exps.filter(function(e) { return e.estado === 'activo'; }).length;
+      // Vencimientos próximos 7 días
+      const hoyMs = Date.now();
+      const venc7 = exps.filter(function(e) {
+        if (!e.proximoVencimiento) return false;
+        var d = new Date(e.proximoVencimiento);
+        if (isNaN(d.getTime())) return false;
+        var diff = (d.getTime() - hoyMs) / 86400000;
+        return diff >= -1 && diff <= 7;
+      });
+      document.getElementById('stat-venc').textContent = venc7.length;
+      var vSec = document.getElementById('venc-alert-section');
+      if (vSec && venc7.length) {
+        var vh = '<div class="card" style="border:1px solid rgba(239,68,68,.35);padding:0">' +
+          '<div style="padding:.75rem 1.25rem;border-bottom:1px solid rgba(239,68,68,.2);display:flex;align-items:center;gap:.5rem">' +
+          '<span style="color:#ef4444">⚠️</span><span style="font-weight:600;color:#ef4444;font-size:.9rem">Vencimientos próximos (7 días)</span></div>' +
+          '<div class="table-wrapper"><table><thead><tr><th>Carátula</th><th>Vence</th><th>Estado</th></tr></thead><tbody>';
+        venc7.forEach(function(e) {
+          var d = new Date(e.proximoVencimiento);
+          var diff = Math.ceil((d.getTime() - hoyMs) / 86400000);
+          var cls = diff <= 1 ? '#ef4444' : diff <= 3 ? '#f59e0b' : '#22c55e';
+          vh += '<tr onclick="Router.go(\'expediente-detalle\',{id:\'' + e.id + '\'})" style="cursor:pointer">' +
+            '<td style="font-weight:500">' + Utils.truncate(e.caratula, 40) + '</td>' +
+            '<td style="color:' + cls + ';font-weight:700">' + Utils.formatDate(e.proximoVencimiento) + (diff <= 0 ? ' (VENCIDO)' : diff === 1 ? ' (mañana)' : ' (en ' + diff + 'd)') + '</td>' +
+            '<td>' + Utils.statusBadge(e.estado || 'activo') + '</td></tr>';
+        });
+        vh += '</tbody></table></div></div>';
+        vSec.innerHTML = vh;
+      }
     }
     const recent = exps.slice(0, 5);
     const list = document.getElementById('recent-list');
@@ -303,10 +374,13 @@ Router.register('expedientes', async function(container) {
     if (ev.target.dataset.s === undefined) return;
     document.querySelectorAll('#chips-estado .chip').forEach(function(c) { c.classList.remove('active'); });
     ev.target.classList.add('active');
+    window._expPage = 0;
     _expFilter();
   });
 
   let allExps = [];
+  var PAGE_SIZE = 20;
+  window._expPage = 0;
 
   // Puebla los selects con valores únicos de los datos
   function _buildSelects() {
@@ -365,13 +439,26 @@ Router.register('expedientes', async function(container) {
     });
 
     var cnt = document.getElementById('exp-count');
-    if (cnt) cnt.textContent = list.length + ' expediente' + (list.length !== 1 ? 's' : '') + (dirty ? ' (filtrado)' : '');
+    var totalPages = Math.ceil(list.length / PAGE_SIZE) || 1;
+    if (window._expPage >= totalPages) window._expPage = totalPages - 1;
+    var page = window._expPage;
+    var paged = list.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+    if (cnt) cnt.textContent = list.length + ' expediente' + (list.length !== 1 ? 's' : '') +
+      (dirty ? ' (filtrado)' : '') +
+      (totalPages > 1 ? ' — pág ' + (page + 1) + '/' + totalPages : '');
 
     var el = document.getElementById('exp-list');
     if (!list.length) {
       el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📂</div><p class="empty-state-text">Sin resultados para los filtros aplicados</p></div>';
     } else {
-      el.innerHTML = '<div class="grid-2">' + list.map(function(e) { return renderExpCard(e); }).join('') + '</div>';
+      var pagination = totalPages > 1
+        ? '<div class="pagination-bar">' +
+          '<button class="btn btn-ghost btn-sm" onclick="window._expPage=Math.max(0,window._expPage-1);window._expFilter()" ' + (page === 0 ? 'disabled' : '') + '>&larr; Anterior</button>' +
+          '<span style="font-size:.82rem;color:var(--text-muted)">Página ' + (page + 1) + ' de ' + totalPages + '</span>' +
+          '<button class="btn btn-ghost btn-sm" onclick="window._expPage=Math.min(' + (totalPages-1) + ',window._expPage+1);window._expFilter()" ' + (page >= totalPages - 1 ? 'disabled' : '') + '>Siguiente &rarr;</button>' +
+          '</div>'
+        : '';
+      el.innerHTML = '<div class="grid-2">' + paged.map(function(e) { return renderExpCard(e); }).join('') + '</div>' + pagination;
     }
   };
 
@@ -382,6 +469,7 @@ Router.register('expedientes', async function(container) {
     document.getElementById('filter-etapa').value = '';
     document.querySelectorAll('#chips-estado .chip').forEach(function(c) { c.classList.remove('active'); });
     document.querySelector('#chips-estado .chip').classList.add('active');
+    window._expPage = 0;
     _expFilter();
   };
 
@@ -574,6 +662,18 @@ Router.register('expediente-detalle', async function(container) {
       '</div>' +
       '</div>';
 
+    // Historial de etapa (Feature 2)
+    if (exp.etapaHistorial && exp.etapaHistorial.length) {
+      html += '<div class="card" style="margin-top:1rem"><div class="card-header"><h3 class="card-title">Historial de etapas</h3></div><div class="card-body">' +
+        '<div class="timeline">' +
+        exp.etapaHistorial.slice().reverse().map(function(h) {
+          return '<div class="timeline-item"><div class="timeline-dot"></div>' +
+            '<div class="timeline-date">' + (h.fecha ? Utils.formatDateTime(h.fecha) : '') + ' &mdash; ' + (h.autor || '') + '</div>' +
+            '<div class="timeline-content" style="font-weight:500">' + (h.etapa || '') + '</div></div>';
+        }).join('') +
+        '</div></div></div>';
+    }
+
     // Sección GAS (solo admin)
     html += '<div id="gas-causas-section" style="margin-top:1rem">' +
               '<div class="card"><div class="card-header"><h3 class="card-title">&#128204; Estado en seguimiento GAS</h3></div>' +
@@ -714,6 +814,11 @@ async function guardarActualizacion(expId) {
     await API.addActualizacion(expId, texto.trim());
     toast('Actualizacion guardada', 'success');
     closeModal();
+    // Feature 4: WA automático al cliente si tiene teléfono
+    const _expCur = Store.getCurrent();
+    if (_expCur && _expCur.clienteTelefono) {
+      WA.abrirWA(WA.linkNovedades(_expCur.clienteTelefono, _expCur.caratula, texto.trim()));
+    }
     Router.go('expediente-detalle', { id: expId });
   } catch(e) {
     toast('Error al guardar', 'error');
@@ -821,6 +926,15 @@ async function guardarExpediente(editId) {
   Utils.setLoading(btn, true);
   try {
     if (editId) {
+      // Feature 2: historial de etapa
+      const cur = Store.getCurrent();
+      if (cur && data.etapaProcesal && cur.etapaProcesal !== data.etapaProcesal && data.etapaProcesal) {
+        data.etapaHistorial = firebase.firestore.FieldValue.arrayUnion({
+          etapa: data.etapaProcesal,
+          fecha: new Date().toISOString(),
+          autor: (Store.getUser().nombre || Store.getUser().uid)
+        });
+      }
       await API.updateExpediente(editId, data);
       toast('Expediente actualizado', 'success');
       Router.go('expediente-detalle', { id: editId });
@@ -950,6 +1064,7 @@ Router.register('reportes', async function(container) {
     '<div class="page-actions">' +
     '<button class="btn btn-outline btn-sm" id="btn-csv" onclick="exportarCSV()">&#8615; Exportar CSV</button>' +
     '<button class="btn btn-outline btn-sm" id="btn-json" onclick="exportarJSON()">&#8615; Exportar JSON</button>' +
+    '<button class="btn btn-outline btn-sm" onclick="window.print()">🖨️ Imprimir</button>' +
     '</div></div>' +
     '<div id="rep-body"><div class="spinner"></div></div>';
 
@@ -1337,6 +1452,95 @@ Router.register('solicitar-acceso', function(container) {
     '<div class="auth-divider">o</div>' +
     '<p style="font-size:0.85rem;text-align:center;color:var(--text-muted)">Si ya tenes cuenta: <a href="#/login">Iniciar sesion</a></p>' +
     '</div>';
+});
+
+// ── CALENDARIO ───────────────────────────────────────────────
+Router.register('calendario', async function(container) {
+  container.className = 'view-container fade-in';
+  renderHeader(); renderSidebar();
+  if (!Store.isProfesional()) { Router.go('dashboard'); return; }
+
+  var now = new Date();
+  var calYear  = now.getFullYear();
+  var calMonth = now.getMonth(); // 0-based
+
+  function renderCal(year, month) {
+    var exps = Store.getExpedientes();
+    var monthLabel = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                      'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][month];
+    var firstDay = new Date(year, month, 1).getDay(); // 0=dom
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Agrupar vencimientos del mes por día
+    var byDay = {};
+    exps.forEach(function(e) {
+      if (!e.proximoVencimiento) return;
+      var d = new Date(e.proximoVencimiento);
+      if (isNaN(d.getTime())) return;
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        var day = d.getDate();
+        if (!byDay[day]) byDay[day] = [];
+        byDay[day].push(e);
+      }
+    });
+
+    var todayDate = new Date();
+    var todayStr = todayDate.getFullYear() + '-' + todayDate.getMonth() + '-' + todayDate.getDate();
+
+    var h = '<div class="page-header"><div><h1 class="page-title">Calendario de Vencimientos</h1></div></div>';
+    h += '<div class="card" style="padding:1.5rem">';
+    h += '<div class="cal-nav">' +
+         '<button class="btn btn-ghost btn-sm" onclick="_calPrev()">&larr;</button>' +
+         '<span style="font-weight:600;font-size:1rem">' + monthLabel + ' ' + year + '</span>' +
+         '<button class="btn btn-ghost btn-sm" onclick="_calNext()">&rarr;</button>' +
+         '</div>';
+
+    h += '<div class="cal-grid">';
+    ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].forEach(function(d) {
+      h += '<div class="cal-cell cal-header">' + d + '</div>';
+    });
+
+    // blanks before first day
+    for (var b = 0; b < firstDay; b++) h += '<div class="cal-cell cal-blank"></div>';
+
+    for (var d = 1; d <= daysInMonth; d++) {
+      var isToday = (year === todayDate.getFullYear() && month === todayDate.getMonth() && d === todayDate.getDate());
+      var events  = byDay[d] || [];
+      h += '<div class="cal-cell' + (isToday ? ' cal-today' : '') + '">';
+      h += '<div class="cal-day-num">' + d + '</div>';
+      events.slice(0, 3).forEach(function(e) {
+        var col = _fueroColors(e.fuero);
+        h += '<div class="cal-event" style="background:' + col.light + ';border-left:3px solid ' + col.primary + ';color:' + col.dark + '" ' +
+             'onclick="event.stopPropagation();Router.go(\'expediente-detalle\',{id:\'' + e.id + '\'})">' +
+             Utils.truncate(e.caratula, 22) + '</div>';
+      });
+      if (events.length > 3) h += '<div class="cal-event-more">+' + (events.length - 3) + ' más</div>';
+      h += '</div>';
+    }
+
+    h += '</div></div>'; // /cal-grid /card
+    container.innerHTML = h;
+  }
+
+  window._calPrev = function() {
+    calMonth--;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    renderCal(calYear, calMonth);
+  };
+  window._calNext = function() {
+    calMonth++;
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderCal(calYear, calMonth);
+  };
+
+  container.innerHTML = '<div class="spinner"></div>';
+  try {
+    var exps = await API.getExpedientes();
+    Store.setExpedientes(exps);
+    renderCal(calYear, calMonth);
+  } catch(e) {
+    container.innerHTML = '<p class="form-error">Error al cargar expedientes.</p>';
+  }
 });
 
 // ── PWA service worker ──────────────────────────────────────
