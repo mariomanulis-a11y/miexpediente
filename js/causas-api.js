@@ -34,7 +34,7 @@ var CausasAPI = (function () {
       var script = document.createElement('script');
       var timer  = setTimeout(function () {
         cleanup();
-        reject(new Error('JSONP: timeout al llamar al servidor GAS'));
+        reject(new Error('JSONP: timeout (12s) — GAS no respondió. Verificá conexión a internet.'));
       }, 12000);
 
       function cleanup() {
@@ -60,19 +60,25 @@ var CausasAPI = (function () {
 
   // ── fetch con fallback a JSONP ─────────────────────────────────
   async function _fetchRaw() {
-    // Intento 1: fetch estándar (requiere CORS habilitado en GAS)
+    var baseUrl = GAS_URL.split('?')[0];
+    var urlConCache = baseUrl + '?action=causas&t=' + Date.now(); // cache-bust
+
+    // Intento 1: fetch estándar con cache-bust
     try {
-      var res = await fetch(GAS_URL, { redirect: 'follow' });
+      var res = await fetch(urlConCache, { redirect: 'follow' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      var data = await res.json();
-      return data;
-    } catch (corsErr) {
-      // Intento 2: JSONP (no requiere CORS, requiere soporte callback= en doGet)
-      console.warn('[CausasAPI] fetch falló (' + (corsErr.message || corsErr) +
-                   '), reintentando con JSONP…');
-      var jsonpUrl = GAS_URL.split('?')[0];
-      return jsonpFetch(jsonpUrl + '?action=causas');
+      var text = await res.text();
+      // Si el response es HTML (login de Google), lanzar error descriptivo
+      if (text.trim().startsWith('<')) {
+        throw new Error('GAS devolvió HTML — verificá que el deploy sea público (Cualquiera)');
+      }
+      return JSON.parse(text);
+    } catch (fetchErr) {
+      console.warn('[CausasAPI] fetch falló:', fetchErr.message, '— reintentando con JSONP');
     }
+
+    // Intento 2: JSONP con cache-bust
+    return jsonpFetch(baseUrl + '?action=causas&t=' + Date.now());
   }
 
   // ── fetchCausas: devuelve array plano de causas (con caché) ───

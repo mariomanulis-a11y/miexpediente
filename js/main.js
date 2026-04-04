@@ -147,7 +147,7 @@ async function syncDesdeSheets() {
     if (Router.current() === 'expedientes') Router.go('expedientes');
     if (Router.current() === 'dashboard')   Router.go('dashboard');
   } catch(e) {
-    toast('Error al sincronizar: ' + (e.message || 'Sin conexión al Sheet'), 'error');
+    toast('Error: ' + (e.message || 'Sin conexión al Sheet'), 'error', 8000);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '↻ Sincronizar desde Sheet'; }
   }
