@@ -1,4 +1,4 @@
-const CACHE_NAME = 'miexpediente-v5';
+const CACHE_NAME = 'miexpediente-v6';
 
 // Base path dinámica: funciona tanto en GitHub Pages (/miexpediente/)
 // como en dominio propio (/)
