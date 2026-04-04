@@ -27,15 +27,40 @@ var CausasAPI = (function () {
     { keys: ['CONCILIAR'],                 label: 'Conciliar',         color: '#14b8a6' }
   ];
 
-  // ── JSONP helper (funciona en iOS Safari donde fetch falla por CORS/redirect) ──
+  // ── XHR helper — más compatible que fetch en iOS Safari ───────
+  function xhrFetch(url) {
+    return new Promise(function(resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.timeout = 15000;
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          var text = xhr.responseText || '';
+          if (text.trim().startsWith('<')) {
+            reject(new Error('GAS devolvió HTML — deploy no público'));
+            return;
+          }
+          try { resolve(JSON.parse(text)); }
+          catch(e) { reject(new Error('Error al parsear respuesta JSON')); }
+        } else {
+          reject(new Error('HTTP ' + xhr.status));
+        }
+      };
+      xhr.onerror   = function() { reject(new Error('XHR: error de red')); };
+      xhr.ontimeout = function() { reject(new Error('XHR: timeout (15s)')); };
+      xhr.send();
+    });
+  }
+
+  // ── JSONP helper — último recurso ──────────────────────────────
   function jsonpFetch(url) {
     return new Promise(function(resolve, reject) {
       var cbName = '__gasCb_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
       var script = document.createElement('script');
       var timer  = setTimeout(function() {
         cleanup();
-        reject(new Error('Timeout (12s) — GAS no respondió'));
-      }, 12000);
+        reject(new Error('JSONP: timeout (15s) — GAS no respondió'));
+      }, 15000);
 
       function cleanup() {
         clearTimeout(timer);
@@ -46,7 +71,7 @@ var CausasAPI = (function () {
       window[cbName] = function(data) { cleanup(); resolve(data); };
       script.onerror = function() {
         cleanup();
-        reject(new Error('No se pudo cargar el script de GAS — verificá conexión'));
+        reject(new Error('JSONP: error al cargar script'));
       };
       var sep = url.indexOf('?') >= 0 ? '&' : '?';
       script.src = url + sep + 'callback=' + cbName;
@@ -54,24 +79,32 @@ var CausasAPI = (function () {
     });
   }
 
-  // ── fetch con fallback a JSONP (para iOS Safari) ──────────────
+  // ── _fetchRaw: fetch → XHR → JSONP ────────────────────────────
   async function _fetchRaw() {
     var baseUrl = GAS_URL.split('?')[0];
-    var url     = baseUrl + '?action=causas&t=' + Date.now();
+    var t       = Date.now();
 
-    // Intento 1: fetch estándar (Android Chrome, desktop)
+    // Intento 1: fetch (desktop Chrome/Firefox)
     try {
-      var res = await fetch(url, { method: 'GET', credentials: 'omit', redirect: 'follow' });
+      var res = await fetch(baseUrl + '?action=causas&t=' + t,
+                            { method: 'GET', credentials: 'omit', redirect: 'follow' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var text = await res.text();
-      if (text.trim().startsWith('<')) throw new Error('GAS devolvió HTML');
+      if (text.trim().startsWith('<')) throw new Error('HTML');
       return JSON.parse(text);
-    } catch (e1) {
-      console.warn('[CausasAPI] fetch falló (' + e1.message + ') — reintentando con JSONP (iOS)');
+    } catch(e1) {
+      console.warn('[CausasAPI] fetch falló:', e1.message);
     }
 
-    // Intento 2: JSONP — funciona en iOS Safari y cualquier browser
-    return jsonpFetch(baseUrl + '?action=causas&t=' + Date.now());
+    // Intento 2: XHR (iOS Safari — mejor compatibilidad con redirects)
+    try {
+      return await xhrFetch(baseUrl + '?action=causas&t=' + (t + 1));
+    } catch(e2) {
+      console.warn('[CausasAPI] XHR falló:', e2.message);
+    }
+
+    // Intento 3: JSONP
+    return jsonpFetch(baseUrl + '?action=causas&t=' + (t + 2));
   }
 
   // ── fetchCausas: devuelve array plano de causas (con caché) ───
@@ -138,16 +171,19 @@ var CausasAPI = (function () {
   // ── getDiagnostico: retorna info de columnas reconocidas por pestaña ─
   async function getDiagnostico() {
     var baseUrl = GAS_URL.split('?')[0];
-    var url     = baseUrl + '?action=diagnostico&t=' + Date.now();
+    var t       = Date.now();
     try {
-      var res = await fetch(url, { method: 'GET', credentials: 'omit', redirect: 'follow' });
+      var res = await fetch(baseUrl + '?action=diagnostico&t=' + t,
+                            { method: 'GET', credentials: 'omit', redirect: 'follow' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var text = await res.text();
-      if (text.trim().startsWith('<')) throw new Error('GAS devolvió HTML');
+      if (text.trim().startsWith('<')) throw new Error('HTML');
       return JSON.parse(text);
-    } catch(e) {
-      return jsonpFetch(baseUrl + '?action=diagnostico&t=' + Date.now());
-    }
+    } catch(e1) {}
+    try {
+      return await xhrFetch(baseUrl + '?action=diagnostico&t=' + (t + 1));
+    } catch(e2) {}
+    return jsonpFetch(baseUrl + '?action=diagnostico&t=' + (t + 2));
   }
 
   // ── API pública ────────────────────────────────────────────────
