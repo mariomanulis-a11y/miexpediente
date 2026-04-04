@@ -27,58 +27,49 @@ var CausasAPI = (function () {
     { keys: ['CONCILIAR'],                 label: 'Conciliar',         color: '#14b8a6' }
   ];
 
-  // ── JSONP helper ───────────────────────────────────────────────
-  function jsonpFetch(url) {
-    return new Promise(function (resolve, reject) {
-      var cbName = '__gasCallback_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
-      var script = document.createElement('script');
-      var timer  = setTimeout(function () {
-        cleanup();
-        reject(new Error('JSONP: timeout (12s) — GAS no respondió. Verificá conexión a internet.'));
-      }, 12000);
-
-      function cleanup() {
-        clearTimeout(timer);
-        delete window[cbName];
-        if (script.parentNode) script.parentNode.removeChild(script);
-      }
-
-      window[cbName] = function (data) { cleanup(); resolve(data); };
-      script.onerror = function () {
-        cleanup();
-        reject(new Error(
-          'GAS inaccesible. Verificá que el deploy tenga acceso "Cualquiera" (anónimo). ' +
-          'URL: ' + script.src.slice(0, 80) + '…'
-        ));
-      };
-
-      var sep = url.indexOf('?') >= 0 ? '&' : '?';
-      script.src = url + sep + 'callback=' + cbName;
-      document.head.appendChild(script);
-    });
-  }
-
-  // ── fetch con fallback a JSONP ─────────────────────────────────
+  // ── fetch robusto: 3 intentos sin JSONP ──────────────────────
   async function _fetchRaw() {
     var baseUrl = GAS_URL.split('?')[0];
-    var urlConCache = baseUrl + '?action=causas&t=' + Date.now(); // cache-bust
+    var url     = baseUrl + '?action=causas&t=' + Date.now();
+    var lastErr = null;
 
-    // Intento 1: fetch estándar con cache-bust
+    // Intento 1: fetch con credentials omit (evita redirect a login de Google)
     try {
-      var res = await fetch(urlConCache, { redirect: 'follow' });
+      var res = await fetch(url, { method: 'GET', credentials: 'omit', redirect: 'follow' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       var text = await res.text();
-      // Si el response es HTML (login de Google), lanzar error descriptivo
-      if (text.trim().startsWith('<')) {
-        throw new Error('GAS devolvió HTML — verificá que el deploy sea público (Cualquiera)');
-      }
+      if (text.trim().startsWith('<')) throw new Error('respuesta HTML — deploy no público');
       return JSON.parse(text);
-    } catch (fetchErr) {
-      console.warn('[CausasAPI] fetch falló:', fetchErr.message, '— reintentando con JSONP');
+    } catch (e1) {
+      lastErr = e1;
+      console.warn('[CausasAPI] intento 1 falló:', e1.message);
     }
 
-    // Intento 2: JSONP con cache-bust
-    return jsonpFetch(baseUrl + '?action=causas&t=' + Date.now());
+    // Intento 2: fetch con mode cors explícito
+    try {
+      var res2 = await fetch(url, { method: 'GET', mode: 'cors', credentials: 'omit' });
+      if (!res2.ok) throw new Error('HTTP ' + res2.status);
+      var text2 = await res2.text();
+      if (text2.trim().startsWith('<')) throw new Error('respuesta HTML');
+      return JSON.parse(text2);
+    } catch (e2) {
+      lastErr = e2;
+      console.warn('[CausasAPI] intento 2 falló:', e2.message);
+    }
+
+    // Intento 3: fetch sin opciones extra
+    try {
+      var res3 = await fetch(baseUrl + '?action=causas');
+      if (!res3.ok) throw new Error('HTTP ' + res3.status);
+      var text3 = await res3.text();
+      if (text3.trim().startsWith('<')) throw new Error('respuesta HTML — deploy no público');
+      return JSON.parse(text3);
+    } catch (e3) {
+      lastErr = e3;
+      console.warn('[CausasAPI] intento 3 falló:', e3.message);
+    }
+
+    throw new Error('No se pudo conectar con GAS. Detalle: ' + (lastErr ? lastErr.message : 'error desconocido'));
   }
 
   // ── fetchCausas: devuelve array plano de causas (con caché) ───
@@ -144,14 +135,13 @@ var CausasAPI = (function () {
 
   // ── getDiagnostico: retorna info de columnas reconocidas por pestaña ─
   async function getDiagnostico() {
-    var baseUrl = GAS_URL.split('?')[0];   // siempre limpio, sin query string
-    try {
-      var res = await fetch(baseUrl + '?action=diagnostico', { redirect: 'follow' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return await res.json();
-    } catch (e) {
-      return jsonpFetch(baseUrl + '?action=diagnostico');
-    }
+    var baseUrl = GAS_URL.split('?')[0];
+    var url     = baseUrl + '?action=diagnostico&t=' + Date.now();
+    var res = await fetch(url, { method: 'GET', credentials: 'omit', redirect: 'follow' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var text = await res.text();
+    if (text.trim().startsWith('<')) throw new Error('GAS devolvió HTML — deploy no público');
+    return JSON.parse(text);
   }
 
   // ── API pública ────────────────────────────────────────────────
