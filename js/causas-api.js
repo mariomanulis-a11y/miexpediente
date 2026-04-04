@@ -64,7 +64,7 @@ var CausasAPI = (function () {
       // Intento 2: JSONP (no requiere CORS, requiere soporte callback= en doGet)
       console.warn('[CausasAPI] fetch falló (' + (corsErr.message || corsErr) +
                    '), reintentando con JSONP…');
-      var jsonpUrl = GAS_URL.replace('?action=causas', '');
+      var jsonpUrl = GAS_URL.split('?')[0];
       return jsonpFetch(jsonpUrl + '?action=causas');
     }
   }
@@ -132,7 +132,7 @@ var CausasAPI = (function () {
 
   // ── getDiagnostico: retorna info de columnas reconocidas por pestaña ─
   async function getDiagnostico() {
-    var baseUrl = GAS_URL.replace('?action=causas', '');
+    var baseUrl = GAS_URL.split('?')[0];   // siempre limpio, sin query string
     try {
       var res = await fetch(baseUrl + '?action=diagnostico', { redirect: 'follow' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
