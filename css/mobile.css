@@ -160,6 +160,90 @@
   .col-2 {
     grid-template-columns: 1fr !important;
   }
+
+  /* ── Búsqueda global en header ── */
+  .header-search-wrap {
+    position: static;
+    flex: 1;
+    margin: 0 0.5rem;
+  }
+  .header-search-input {
+    width: 100% !important;
+    font-size: .8rem;
+  }
+  .header-search-input:focus {
+    width: 100% !important;
+  }
+  .header-search-dropdown {
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    right: 0;
+    min-width: unset;
+    border-radius: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  /* ── Filtros de expedientes: apilados verticalmente ── */
+  #exp-filters {
+    flex-direction: column !important;
+    gap: .6rem !important;
+  }
+  #exp-filters > div {
+    width: 100%;
+  }
+  #exp-filters select {
+    width: 100% !important;
+    min-width: unset !important;
+  }
+  .filter-chips {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* ── Paginación ── */
+  .pagination-bar {
+    gap: .5rem;
+    flex-wrap: wrap;
+  }
+  .pagination-bar .btn {
+    font-size: .78rem;
+    padding: 4px 10px;
+  }
+
+  /* ── Calendario: grilla compacta ── */
+  .cal-grid {
+    gap: 2px;
+  }
+  .cal-cell {
+    min-height: 52px;
+    padding: 2px 3px;
+    font-size: .65rem;
+  }
+  .cal-header {
+    font-size: .6rem;
+    padding: 4px 0;
+  }
+  .cal-day-num {
+    font-size: .7rem;
+  }
+  .cal-event {
+    font-size: .58rem;
+    padding: 1px 3px;
+  }
+  .cal-nav span {
+    font-size: .9rem;
+  }
+
+  /* ── Tabla de vencimientos en dashboard ── */
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  table {
+    min-width: 480px;
+  }
 }
 
 /* ── Extra pequeños (< 480px, iPhone SE, etc.) ── */
@@ -183,5 +267,28 @@
   .btn-lg {
     font-size: 0.95rem;
     padding: 0.7rem 1rem;
+  }
+
+  /* Calendario aún más compacto en iPhone SE */
+  .cal-cell {
+    min-height: 40px;
+    padding: 1px 2px;
+  }
+  .cal-event { display: none; }  /* solo puntos, sin texto */
+  .cal-cell:has(.cal-event) .cal-day-num::after {
+    content: ' •';
+    color: var(--primary);
+  }
+
+  /* Stats: 2 columnas, más pequeño */
+  .grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem;
+  }
+
+  /* Header search oculto en pantallas muy chicas, se muestra al tocar */
+  .header-search-input {
+    font-size: .72rem;
+    padding: 5px 8px;
   }
 }
