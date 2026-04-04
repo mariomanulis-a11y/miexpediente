@@ -344,7 +344,12 @@ Router.register('expedientes', async function(container) {
 
   container.innerHTML =
     '<div class="page-header"><div><h1 class="page-title">Expedientes</h1></div>' +
-    (isPro ? '<div class="page-actions"><button class="btn btn-primary" onclick="Router.go(\'nuevo-expediente\')">+ Nuevo</button></div>' : '') +
+    (isPro
+      ? '<div class="page-actions">' +
+        '<button class="btn-sync" id="sync-btn" onclick="syncDesdeSheets()" title="Sincronizar desde Google Sheets">&#8635; Sync</button>' +
+        '<button class="btn btn-primary" onclick="Router.go(\'nuevo-expediente\')">+ Nuevo</button>' +
+        '</div>'
+      : '') +
     '</div>' +
 
     // ── Barra de búsqueda ──
