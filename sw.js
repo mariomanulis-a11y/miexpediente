@@ -1,4 +1,4 @@
-const CACHE_NAME = 'miexpediente-v2';
+const CACHE_NAME = 'miexpediente-v3';
 
 // Base path dinámica: funciona tanto en GitHub Pages (/miexpediente/)
 // como en dominio propio (/)
@@ -9,22 +9,22 @@ const CACHE_URLS = [
   BASE + 'index.html',
   BASE + 'manifest.json',
   BASE + 'css/variables.css',
-  BASE + 'css/reset.css',
   BASE + 'css/base.css',
   BASE + 'css/components.css',
   BASE + 'css/layout.css',
   BASE + 'css/auth.css',
   BASE + 'css/dashboard.css',
-  BASE + 'css/expedientes.css',
   BASE + 'css/mobile.css',
-  BASE + 'css/main.css',
   BASE + 'js/config.js',
   BASE + 'js/utils.js',
   BASE + 'js/store.js',
   BASE + 'js/auth.js',
   BASE + 'js/api.js',
+  BASE + 'js/etapas.js',
+  BASE + 'js/causas-api.js',
   BASE + 'js/whatsapp.js',
   BASE + 'js/router.js',
+  BASE + 'js/views.js',
   BASE + 'js/main.js',
   BASE + 'assets/logo.svg',
   BASE + 'assets/icon-192.svg',
