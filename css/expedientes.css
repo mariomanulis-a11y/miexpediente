@@ -65,3 +65,80 @@
 .act-texto { font-size:14px; line-height:1.6; }
 .act-fecha { font-size:12px; color:var(--text-light); margin-top:3px; }
 .nueva-act textarea { min-height:80px; }
+
+/* ── Glosario Jurídico — Tooltips ───────────────────────────────────────── */
+.glosario-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: help;
+  border-bottom: 1px dashed currentColor;
+  text-decoration: none;
+}
+.glosario-info-icon {
+  font-size: .72em;
+  opacity: .55;
+  line-height: 1;
+  flex-shrink: 0;
+  font-style: normal;
+}
+.glosario-tipbox {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: #f1f5f9;
+  font-size: .74rem;
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1.5;
+  padding: 8px 12px;
+  border-radius: 8px;
+  width: 230px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.4);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .16s ease, visibility .16s ease;
+  z-index: 9999;
+  white-space: normal;
+  text-align: left;
+}
+/* Flecha del tooltip */
+.glosario-tipbox::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1e293b;
+}
+/* Desktop: mostrar con hover */
+@media (hover: hover) {
+  .glosario-tooltip:hover .glosario-tipbox {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+/* Móvil: mostrar con clase .gl-open (JS toggle) */
+.glosario-tooltip.gl-open .glosario-tipbox {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+/* Responsivo: achicar en pantallas pequeñas */
+@media (max-width: 480px) {
+  .glosario-tipbox {
+    width: 185px;
+    font-size: .71rem;
+    left: 0;
+    transform: none;
+  }
+  .glosario-tipbox::after {
+    left: 20px;
+    transform: none;
+  }
+}

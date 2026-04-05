@@ -779,21 +779,21 @@ function _renderStepper(fuero, etapaActual, tasksNotes) {
   roadmap.completadas.forEach(function(n) {
     h += '<div class="step step-done" style="--step-c:' + colors.primary + '">' +
          '<div class="step-dot step-dot-done" style="background:' + colors.primary + '">&#10003;</div>' +
-         '<div class="step-label">' + n + '</div></div>';
+         '<div class="step-label">' + Utils.glosarioTooltip(n) + '</div></div>';
   });
 
   h += '<div class="step step-current" style="--step-c:' + colors.primary + '">' +
        '<div class="step-dot step-dot-current step-pulse" style="background:' + colors.primary + ';--pulse-rgb:' + colors.rgb + '">&#9679;</div>' +
-       '<div class="step-label step-label-current" style="color:' + colors.primary + '">' + roadmap.actual + '</div></div>';
+       '<div class="step-label step-label-current" style="color:' + colors.primary + '">' + Utils.glosarioTooltip(roadmap.actual) + '</div></div>';
 
   roadmap.pendientes.forEach(function(n) {
     h += '<div class="step step-pending">' +
          '<div class="step-dot step-dot-pending">&#9675;</div>' +
-         '<div class="step-label">' + n + '</div></div>';
+         '<div class="step-label">' + Utils.glosarioTooltip(n) + '</div></div>';
   });
 
   h += '<div class="step step-pending"><div class="step-dot step-dot-pending">&#127937;</div>' +
-       '<div class="step-label">' + roadmap.hito + '</div></div>';
+       '<div class="step-label">' + Utils.glosarioTooltip(roadmap.hito) + '</div></div>';
 
   h += '</div>'; // /stepper
 
@@ -1822,3 +1822,17 @@ Router.init();
 
 // Iniciar listener de autenticación (después de Router.init)
 Auth.initAuthListener();
+
+// ── Glosario: soporte de click/tap para móvil ────────────────────────────────
+// En desktop se usa :hover (CSS puro). En móvil se toggle la clase .gl-open.
+document.addEventListener('click', function(e) {
+  var tip = e.target.closest('.glosario-tooltip');
+  // Cierra cualquier tooltip abierto que no sea el clickeado
+  document.querySelectorAll('.glosario-tooltip.gl-open').forEach(function(el) {
+    if (el !== tip) el.classList.remove('gl-open');
+  });
+  if (tip) {
+    e.stopPropagation();
+    tip.classList.toggle('gl-open');
+  }
+});
