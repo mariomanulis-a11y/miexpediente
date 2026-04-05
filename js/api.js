@@ -67,18 +67,22 @@ const API = {
   async updateExpediente(id, data) {
     data.updatedAt = Utils.serverTimestamp();
     await db.collection('expedientes').doc(id).update(data);
-    // Marcar como pendiente de sincronizar al Sheet
+    // Marcar como pendiente de sincronizar al Sheet.
+    // IMPORTANTE: solo incluir campos que vienen explícitamente en data
+    // para evitar pisar columnas del Sheet con valores vacíos.
     try {
       var pending = JSON.parse(localStorage.getItem('_mvc_pending_sync') || '{}');
-      pending[id] = {
-        caratula:      data.caratula      || (Store.getCurrent() && Store.getCurrent().caratula) || '',
-        etapaProcesal: data.etapaProcesal || '',
-        tasks_notes:   data.tasks_notes   || '',
-        observaciones: data.observaciones || '',
-        juzgado:       data.juzgado       || '',
-        secretaria:    data.secretaria    || '',
-        _ts: Date.now()
-      };
+      var entry = pending[id] || {};  // Preservar campos de updates anteriores
+      // Carátula: siempre requerida para el lookup en GAS
+      entry.caratula = data.caratula || (Store.getCurrent() && Store.getCurrent().caratula) || entry.caratula || '';
+      // Solo sobreescribir campos que realmente vienen en este update
+      if (data.etapaProcesal !== undefined) entry.etapaProcesal = data.etapaProcesal;
+      if (data.tasks_notes   !== undefined) entry.tasks_notes   = data.tasks_notes;
+      if (data.observaciones !== undefined) entry.observaciones = data.observaciones;
+      if (data.juzgado       !== undefined) entry.juzgado       = data.juzgado;
+      if (data.secretaria    !== undefined) entry.secretaria    = data.secretaria;
+      entry._ts = Date.now();
+      pending[id] = entry;
       localStorage.setItem('_mvc_pending_sync', JSON.stringify(pending));
     } catch(e) {}
   },
@@ -188,18 +192,30 @@ const API = {
       pendingSync = JSON.parse(localStorage.getItem('_mvc_pending_sync') || '{}');
     } catch(e) {}
 
+    var col = db.collection('expedientes');
+
+    // ── Optimización: leer TODOS los expedientes de Firestore de una vez ──
+    // Evita N queries individuales (1 por causa del Sheet) → 1 sola lectura
+    var allSnap = await col.get();
+    var byCaratula = {};  // caratula.toUpperCase() → doc
+    allSnap.docs.forEach(function(d) {
+      var car = (d.data().caratula || '').trim().toUpperCase();
+      if (car) byCaratula[car] = d;
+    });
+
     var batch    = db.batch();
-    var col      = db.collection('expedientes');
     var upserted = 0;
     var created  = 0;
     var merged   = 0;
+    var batchOps = 0;  // Firestore batch tiene límite de 500 ops
 
     for (var i = 0; i < causas.length; i++) {
       var c = causas[i];
       if (!c.caratula) continue;
 
-      // Buscar expediente existente por caratula (ID único funcional)
-      var snap = await col.where('caratula', '==', c.caratula).limit(1).get();
+      // Buscar en el índice en memoria (sin query extra a Firestore)
+      var existingDoc = byCaratula[c.caratula.trim().toUpperCase()];
+      var snap = existingDoc ? { empty: false, docs: [existingDoc] } : { empty: true };
 
       var payload = {
         // Datos principales (visibles para admin y cliente)
@@ -261,6 +277,7 @@ const API = {
 
         batch.update(snap.docs[0].ref, payload);
         upserted++;
+        batchOps++;
       } else {
         payload.etapaProcesal  = c.etapa || '';
         var newRef = col.doc();
@@ -269,10 +286,18 @@ const API = {
         payload.estado         = 'activo';
         batch.set(newRef, payload);
         created++;
+        batchOps++;
+      }
+
+      // Firestore batch limit: 500 ops → commit y abrir nuevo batch
+      if (batchOps >= 490) {
+        await batch.commit();
+        batch = db.batch();
+        batchOps = 0;
       }
     }
 
-    await batch.commit();
+    if (batchOps > 0) await batch.commit();
     return { upserted: upserted, created: created, total: upserted + created, merged: merged };
   }
 };

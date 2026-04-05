@@ -964,7 +964,9 @@ Router.register('nuevo-expediente', async function(container) {
     clientes.map(function(c) {
       return '<option value="' + c.id + '"' + (v('clienteId') === c.id ? ' selected' : '') + ' data-nombre="' + (c.nombre || '') + '" data-tel="' + (c.telefono || '') + '">' + (c.nombre || c.email) + '</option>';
     }).join('') + '</select></div>' +
-    '<div class="form-group"><label class="form-label">Observaciones</label>' +
+    '<div class="form-group"><label class="form-label">Tareas pendientes</label>' +
+    '<textarea class="form-input" id="exp-tareas" rows="3" placeholder="Ej: Intimar al demandado, Presentar prueba...">' + v('tasks_notes') + '</textarea></div>' +
+    '<div class="form-group"><label class="form-label">Observaciones / Detalle</label>' +
     '<textarea class="form-input" id="exp-obs" rows="3">' + v('observaciones') + '</textarea></div>' +
     '<div class="modal-footer" style="margin-top:1rem">' +
     '<button class="btn btn-ghost" onclick="history.back()">Cancelar</button>' +
@@ -991,6 +993,7 @@ async function guardarExpediente(editId) {
     estado: (document.getElementById('exp-estado') || {}).value || 'activo',
     fechaInicio: (document.getElementById('exp-inicio') || {}).value || '',
     proximoVencimiento: (document.getElementById('exp-vencimiento') || {}).value || '',
+    tasks_notes: (document.getElementById('exp-tareas') || {}).value || '',
     observaciones: (document.getElementById('exp-obs') || {}).value || '',
     clienteId: sel ? sel.value : '',
     clienteNombre: opt ? (opt.dataset.nombre || '') : '',
@@ -1011,6 +1014,12 @@ async function guardarExpediente(editId) {
       }
       await API.updateExpediente(editId, data);
       toast('Expediente actualizado', 'success');
+      // Auto-push al Sheet en background (sin bloquear la navegación)
+      API.pushToSheets().then(function(r) {
+        if (r && r.updated > 0) toast('✅ Guardado en Sheet', 'success', 4000);
+      }).catch(function() {
+        // Si falla el push, el botón "Guardar en Sheet" quedará visible para reintentar
+      });
       Router.go('expediente-detalle', { id: editId });
     } else {
       const newId = await API.createExpediente(data);
