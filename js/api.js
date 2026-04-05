@@ -66,7 +66,21 @@ const API = {
   },
   async updateExpediente(id, data) {
     data.updatedAt = Utils.serverTimestamp();
-    return db.collection('expedientes').doc(id).update(data);
+    await db.collection('expedientes').doc(id).update(data);
+    // Marcar como pendiente de sincronizar al Sheet
+    try {
+      var pending = JSON.parse(localStorage.getItem('_mvc_pending_sync') || '{}');
+      pending[id] = {
+        caratula:      data.caratula      || (Store.getCurrent() && Store.getCurrent().caratula) || '',
+        etapaProcesal: data.etapaProcesal || '',
+        tasks_notes:   data.tasks_notes   || '',
+        observaciones: data.observaciones || '',
+        juzgado:       data.juzgado       || '',
+        secretaria:    data.secretaria    || '',
+        _ts: Date.now()
+      };
+      localStorage.setItem('_mvc_pending_sync', JSON.stringify(pending));
+    } catch(e) {}
   },
   async deleteExpediente(id) {
     return db.collection('expedientes').doc(id).delete();
@@ -111,6 +125,54 @@ const API = {
     return db.collection('expedientes').doc(id).onSnapshot(snap => {
       if (snap.exists) callback(Object.assign({ id: snap.id }, snap.data()));
     });
+  },
+
+  // ── Push cambios locales al Google Sheet via GAS ─────────────
+  // Envía los expedientes marcados como "pendiente" al Worker/GAS.
+  // GAS los busca por carátula y actualiza las columnas editables.
+  async pushToSheets() {
+    var pending = {};
+    try {
+      pending = JSON.parse(localStorage.getItem('_mvc_pending_sync') || '{}');
+    } catch(e) {}
+
+    var ids = Object.keys(pending);
+    if (!ids.length) return { updated: 0, skipped: 0, notFound: [] };
+
+    // Validar: descartar los que no tienen carátula
+    var expedientes = ids
+      .map(function(id) { return pending[id]; })
+      .filter(function(e) { return e.caratula && e.caratula.trim(); });
+
+    if (!expedientes.length) throw new Error('Ningún expediente pendiente tiene carátula válida');
+
+    var workerBase = 'https://gas-proxy.mariomanulis.workers.dev';
+    var res = await fetch(workerBase + '?action=guardar', {
+      method:      'POST',
+      credentials: 'omit',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify({ action: 'guardar', expedientes: expedientes })
+    });
+
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var text = await res.text();
+    if (text.trim().startsWith('<')) throw new Error('GAS devolvió HTML — verificar deploy');
+
+    var data = JSON.parse(text);
+    if (!data.ok) throw new Error(data.error || 'Error en GAS');
+
+    // Limpiar pendientes exitosos
+    localStorage.removeItem('_mvc_pending_sync');
+
+    return data.result;
+  },
+
+  // Retorna cantidad de expedientes pendientes de sync al Sheet
+  getPendingSyncCount() {
+    try {
+      var pending = JSON.parse(localStorage.getItem('_mvc_pending_sync') || '{}');
+      return Object.keys(pending).length;
+    } catch(e) { return 0; }
   },
 
   // ── Sync desde Google Sheets via GAS ─────────────────────────

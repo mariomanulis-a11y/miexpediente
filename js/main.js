@@ -153,6 +153,27 @@ async function syncDesdeSheets() {
   }
 }
 
+async function guardarEnSheet() {
+  var btn = document.getElementById('push-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Guardando...'; }
+  try {
+    var result = await API.pushToSheets();
+    var msg = '✅ Sheet actualizado: ' + result.updated + ' expediente' + (result.updated !== 1 ? 's' : '');
+    if (result.notFound && result.notFound.length) {
+      msg += ' (' + result.notFound.length + ' no encontrado' + (result.notFound.length !== 1 ? 's' : '') + ' en Sheet)';
+    }
+    toast(msg, 'success', 7000);
+    if (btn) btn.style.display = 'none';
+  } catch(e) {
+    toast('Error al guardar en Sheet: ' + (e.message || 'Sin conexión'), 'error', 8000);
+    if (btn) {
+      btn.disabled = false;
+      var count = API.getPendingSyncCount();
+      btn.innerHTML = '&#8679; Guardar en Sheet <span id="push-badge" class="badge">' + count + '</span>';
+    }
+  }
+}
+
 async function verificarSync() {
   try {
     var diag = await CausasAPI.getDiagnostico();
@@ -347,6 +368,7 @@ Router.register('expedientes', async function(container) {
     (isPro
       ? '<div class="page-actions">' +
         '<button class="btn-sync" id="sync-btn" onclick="syncDesdeSheets()" title="Sincronizar desde Google Sheets">&#8635; Sync</button>' +
+        '<button class="btn btn-outline btn-sm" id="push-btn" onclick="guardarEnSheet()" title="Guardar cambios locales en Google Sheets" style="display:none">&#8679; Guardar en Sheet <span id="push-badge" class="badge"></span></button>' +
         '<button class="btn btn-primary" onclick="Router.go(\'nuevo-expediente\')">+ Nuevo</button>' +
         '</div>'
       : '') +
@@ -511,6 +533,14 @@ Router.register('expedientes', async function(container) {
     Store.setExpedientes(allExps);
     _buildSelects();
     _expFilter();
+    // Mostrar botón de push si hay cambios pendientes
+    var pendingCount = API.getPendingSyncCount();
+    var pushBtn = document.getElementById('push-btn');
+    if (pushBtn && pendingCount > 0) {
+      pushBtn.style.display = '';
+      var badge = document.getElementById('push-badge');
+      if (badge) badge.textContent = pendingCount;
+    }
   } catch(err) {
     document.getElementById('exp-list').innerHTML = '<p class="form-error">Error al cargar expedientes.</p>';
   }
