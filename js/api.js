@@ -182,10 +182,17 @@ const API = {
     var causas = await CausasAPI.fetchCausas();
     if (!causas || !causas.length) throw new Error('No se obtuvieron datos del Sheet');
 
+    // Smart merge: cargar pendientes locales para preservar cambios del admin
+    var pendingSync = {};
+    try {
+      pendingSync = JSON.parse(localStorage.getItem('_mvc_pending_sync') || '{}');
+    } catch(e) {}
+
     var batch    = db.batch();
     var col      = db.collection('expedientes');
     var upserted = 0;
     var created  = 0;
+    var merged   = 0;
 
     for (var i = 0; i < causas.length; i++) {
       var c = causas[i];
@@ -228,20 +235,34 @@ const API = {
         updatedAt: Utils.serverTimestamp(),
         syncedAt:  Utils.serverTimestamp()
       };
-      // Solo sobreescribir etapaProcesal si no fue seteada manualmente
-      // (si viene del Sheet como "HACER PRUEBA", no matchea EtapasProcesales —
-      //  el admin puede corregirla manualmente desde el form de edición)
-      if (!snap.empty) {
-        var existing = snap.docs[0].data();
-        if (!existing.etapaProcesal) payload.etapaProcesal = c.etapa || '';
-      } else {
-        payload.etapaProcesal = c.etapa || '';
-      }
 
       if (!snap.empty) {
+        var existing = snap.docs[0].data();
+        var docId    = snap.docs[0].id;
+
+        // Solo sobreescribir etapaProcesal si no fue seteada manualmente
+        // (si viene del Sheet como "HACER PRUEBA", no matchea EtapasProcesales —
+        //  el admin puede corregirla manualmente desde el form de edición)
+        if (!existing.etapaProcesal) payload.etapaProcesal = c.etapa || '';
+
+        // ── Smart merge: el dato local tiene prioridad sobre el Sheet ──────
+        // Si este expediente tiene cambios pendientes de subir, los preservamos
+        var localPending = pendingSync[docId];
+        if (localPending) {
+          // Campos que el admin editó en la app NO se sobreescriben con el Sheet
+          var mergeFields = ['etapaProcesal', 'tasks_notes', 'observaciones', 'juzgado', 'secretaria'];
+          mergeFields.forEach(function(field) {
+            if (localPending[field] !== undefined && localPending[field] !== '') {
+              payload[field] = localPending[field];
+            }
+          });
+          merged++;
+        }
+
         batch.update(snap.docs[0].ref, payload);
         upserted++;
       } else {
+        payload.etapaProcesal  = c.etapa || '';
         var newRef = col.doc();
         payload.createdAt      = Utils.serverTimestamp();
         payload.actualizaciones = [];
@@ -252,6 +273,6 @@ const API = {
     }
 
     await batch.commit();
-    return { upserted: upserted, created: created, total: upserted + created };
+    return { upserted: upserted, created: created, total: upserted + created, merged: merged };
   }
 };

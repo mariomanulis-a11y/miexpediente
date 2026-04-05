@@ -142,7 +142,8 @@ async function syncDesdeSheets() {
   try {
     var result = await API.syncFromSheets();
     var msg = '✅ Sincronizado: ' + result.created + ' nuevos, ' + result.upserted + ' actualizados';
-    toast(msg, 'success', 6000);
+    if (result.merged > 0) msg += ' (' + result.merged + ' con datos locales preservados)';
+    toast(msg, 'success', 7000);
     // Refresca lista si estamos en expedientes
     if (Router.current() === 'expedientes') Router.go('expedientes');
     if (Router.current() === 'dashboard')   Router.go('dashboard');
@@ -552,10 +553,24 @@ function renderExpCard(e) {
   var waLink = (isPro && e.clienteTelefono && etapa)
     ? WA.linkExpediente(e.clienteTelefono, e.caratula, etapa, e.id)
     : null;
+  // Indicador de cambios locales pendientes de subir al Sheet
+  var pendingDot = '';
+  if (isPro) {
+    try {
+      var _ps = JSON.parse(localStorage.getItem('_mvc_pending_sync') || '{}');
+      if (_ps[e.id]) {
+        pendingDot = '<span title="Cambios pendientes de guardar en Sheet" ' +
+          'style="display:inline-block;width:9px;height:9px;border-radius:50%;' +
+          'background:#f97316;margin-left:6px;flex-shrink:0;align-self:center"></span>';
+      }
+    } catch(_) {}
+  }
   return '<div class="expediente-card">' +
     '<div class="expediente-card-header" onclick="verExpediente(\'' + e.id + '\')" style="cursor:pointer">' +
-    '<div><div class="expediente-numero">' + (e.numero || 'S/N') + '</div>' +
+    '<div style="display:flex;align-items:center;gap:0;flex:1;min-width:0">' +
+    '<div style="flex:1;min-width:0"><div class="expediente-numero">' + (e.numero || 'S/N') + '</div>' +
     '<div class="expediente-caratula">' + Utils.truncate(e.caratula, 55) + '</div></div>' +
+    pendingDot + '</div>' +
     Utils.statusBadge(e.estado || 'activo') + '</div>' +
     '<div class="expediente-juzgado">' + (e.juzgado || '') + '</div>' +
     '<div class="expediente-meta">' +
