@@ -1,4 +1,4 @@
-const CACHE_NAME = 'miexpediente-v13';
+const CACHE_NAME = 'miexpediente-v14';
 
 const BASE = self.location.pathname.replace(/\/[^/]*$/, '/');
 

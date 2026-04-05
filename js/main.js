@@ -949,6 +949,7 @@ Router.register('nuevo-expediente', async function(container) {
     field('Juzgado', 'exp-juzgado', 'text', v('juzgado'), 'Ej: Juzgado Civil N°3') +
     field('Secretaria', 'exp-secretaria', 'text', v('secretaria'), '') +
     field('Fuero', 'exp-fuero', 'text', v('fuero'), 'Ej: Laboral, Civil, Familia') +
+    field('Etapa procesal', 'exp-etapa', 'text', v('etapaProcesal'), 'Ej: Prueba, Sentencia, Mediación') +
     '<div class="form-group"><label class="form-label">Estado</label>' +
     '<select class="form-select" id="exp-estado">' +
     ['activo','urgente','suspendido','archivado'].map(function(s) {
@@ -1016,9 +1017,16 @@ async function guardarExpediente(editId) {
       toast('Expediente actualizado', 'success');
       // Auto-push al Sheet en background (sin bloquear la navegación)
       API.pushToSheets().then(function(r) {
-        if (r && r.updated > 0) toast('✅ Guardado en Sheet', 'success', 4000);
-      }).catch(function() {
-        // Si falla el push, el botón "Guardar en Sheet" quedará visible para reintentar
+        if (!r) return;
+        if (r.updated > 0) {
+          var msg = '✅ Guardado en Sheet (' + r.updated + ' exp.)';
+          if (r.notFound && r.notFound.length) msg += ' — ' + r.notFound.length + ' no encontrado/s en Sheet';
+          toast(msg, r.notFound && r.notFound.length ? 'warning' : 'success', 6000);
+        } else if (r.notFound && r.notFound.length) {
+          toast('⚠️ No se encontró en el Sheet: ' + r.notFound[0], 'warning', 8000);
+        }
+      }).catch(function(err) {
+        toast('⚠️ No se pudo guardar en Sheet: ' + (err && err.message || 'sin conexión'), 'warning', 7000);
       });
       Router.go('expediente-detalle', { id: editId });
     } else {

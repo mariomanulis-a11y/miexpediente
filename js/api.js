@@ -165,10 +165,28 @@ const API = {
     var data = JSON.parse(text);
     if (!data.ok) throw new Error(data.error || 'Error en GAS');
 
-    // Limpiar pendientes exitosos
-    localStorage.removeItem('_mvc_pending_sync');
+    // Limpiar pending: quitar solo los que fueron encontrados y actualizados.
+    // Los notFound se conservan para que el usuario pueda reintentarlo.
+    var result = data.result;
+    if (result.notFound && result.notFound.length > 0) {
+      // Conservar en pending los expedientes que GAS no encontró por carátula
+      var notFoundSet = {};
+      result.notFound.forEach(function(car) { notFoundSet[car.trim().toUpperCase()] = true; });
+      var remaining = {};
+      Object.keys(pending).forEach(function(id) {
+        var car = (pending[id].caratula || '').trim().toUpperCase();
+        if (notFoundSet[car]) remaining[id] = pending[id];
+      });
+      if (Object.keys(remaining).length > 0) {
+        localStorage.setItem('_mvc_pending_sync', JSON.stringify(remaining));
+      } else {
+        localStorage.removeItem('_mvc_pending_sync');
+      }
+    } else {
+      localStorage.removeItem('_mvc_pending_sync');
+    }
 
-    return data.result;
+    return result;
   },
 
   // Retorna cantidad de expedientes pendientes de sync al Sheet
