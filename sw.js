@@ -1,7 +1,5 @@
-const CACHE_NAME = 'miexpediente-v10';
+const CACHE_NAME = 'miexpediente-v11';
 
-// Base path dinámica: funciona tanto en GitHub Pages (/miexpediente/)
-// como en dominio propio (/)
 const BASE = self.location.pathname.replace(/\/[^/]*$/, '/');
 
 const CACHE_URLS = [
@@ -33,8 +31,17 @@ const CACHE_URLS = [
 ];
 
 self.addEventListener('install', e => {
+  // Instalar con tolerancia a fallos: si un archivo da 404 no rompe todo el SW
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(CACHE_URLS))
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.all(
+        CACHE_URLS.map(url =>
+          fetch(url).then(res => {
+            if (res.ok) return cache.put(url, res);
+          }).catch(() => {}) // ignorar errores individuales
+        )
+      )
+    )
   );
   self.skipWaiting();
 });
@@ -51,22 +58,24 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
 
-  // No interceptar requests a dominios externos (GAS, Firebase, gstatic, etc.)
-  // Solo cachear archivos propios de la app
   const reqUrl = new URL(e.request.url);
   if (reqUrl.hostname !== self.location.hostname) return;
 
-  // Para navegación (abre desde ícono del escritorio): siempre servir index.html
+  // Navegación: siempre buscar index.html en red primero
   if (e.request.mode === 'navigate') {
     e.respondWith(
-      caches.match(BASE + 'index.html').then(cached => {
-        return cached || fetch(BASE + 'index.html');
-      })
+      fetch(BASE + 'index.html').then(res => {
+        if (res.ok) {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(BASE + 'index.html', clone));
+        }
+        return res;
+      }).catch(() => caches.match(BASE + 'index.html'))
     );
     return;
   }
 
-  // JS y CSS: network-first (siempre código actualizado), fallback a cache si offline
+  // JS y CSS: network-first, fallback a cache
   if (e.request.url.match(/\.(js|css)(\?.*)?$/)) {
     e.respondWith(
       fetch(e.request).then(res => {
