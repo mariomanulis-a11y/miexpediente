@@ -366,13 +366,15 @@ Router.register('expedientes', async function(container) {
 
   container.innerHTML =
     '<div class="page-header"><div><h1 class="page-title">Expedientes</h1></div>' +
+    '<div class="page-actions">' +
     (isPro
-      ? '<div class="page-actions">' +
-        '<button class="btn-sync" id="sync-btn" onclick="syncDesdeSheets()" title="Sincronizar desde Google Sheets">&#8635; Sync</button>' +
-        '<button class="btn btn-outline btn-sm" id="push-btn" onclick="guardarEnSheet()" title="Guardar cambios locales en Google Sheets" style="display:none">&#8679; Guardar en Sheet <span id="push-badge" class="badge"></span></button>' +
-        '<button class="btn btn-primary" onclick="Router.go(\'nuevo-expediente\')">+ Nuevo</button>' +
-        '</div>'
+      ? '<button class="btn-sync" id="sync-btn" onclick="syncDesdeSheets()" title="Sincronizar desde Google Sheets">&#8635; Sync</button>' +
+        '<button class="btn btn-outline btn-sm" id="push-btn" onclick="guardarEnSheet()" title="Guardar cambios locales en Google Sheets" style="display:none">&#8679; Guardar en Sheet <span id="push-badge" class="badge"></span></button>'
       : '') +
+    '<button class="btn btn-success btn-sm" onclick="exportarExcel()" title="Exportar listado a CSV/Excel" style="gap:5px">&#128202; Excel</button>' +
+    '<button class="btn btn-danger btn-sm" onclick="exportarPDF()" title="Descargar PDF del listado" style="gap:5px">&#128196; PDF</button>' +
+    (isPro ? '<button class="btn btn-primary" onclick="Router.go(\'nuevo-expediente\')">+ Nuevo</button>' : '') +
+    '</div>' +
     '</div>' +
 
     // ── Barra de búsqueda ──
@@ -494,6 +496,8 @@ Router.register('expedientes', async function(container) {
       return true;
     });
 
+    window._expFilteredList = list; // expuesto para exportar
+
     var cnt = document.getElementById('exp-count');
     var totalPages = Math.ceil(list.length / PAGE_SIZE) || 1;
     if (window._expPage >= totalPages) window._expPage = totalPages - 1;
@@ -546,6 +550,158 @@ Router.register('expedientes', async function(container) {
     document.getElementById('exp-list').innerHTML = '<p class="form-error">Error al cargar expedientes.</p>';
   }
 });
+
+// ── Exportar Excel (CSV con BOM UTF-8) ───────────────────────────────────────
+function exportarExcel() {
+  var list = window._expFilteredList || [];
+  if (!list.length) { toast('No hay datos para exportar', 'warning'); return; }
+
+  toast('Generando archivo…', 'info', 3000);
+
+  setTimeout(function() {
+    try {
+      var cols = [
+        { h: 'Carátula',       k: function(e) { return e.caratula || ''; } },
+        { h: 'Número Exp.',    k: function(e) { return e.numero || ''; } },
+        { h: 'Estado',         k: function(e) { return e.estado || ''; } },
+        { h: 'Fuero',          k: function(e) { return e.fuero || ''; } },
+        { h: 'Departamento',   k: function(e) { return e.departamento || e._sheetName || ''; } },
+        { h: 'Juzgado',        k: function(e) { return e.juzgado || ''; } },
+        { h: 'Secretaría',     k: function(e) { return e.secretaria || ''; } },
+        { h: 'Etapa Procesal', k: function(e) { return e.etapaProcesal || e.etapaGAS || ''; } },
+        { h: 'Fecha Inicio',   k: function(e) { return e.fechaInicio || ''; } },
+        { h: 'Tareas',         k: function(e) { return e.tasks_notes || ''; } },
+        { h: 'Observaciones',  k: function(e) { return e.observaciones || ''; } },
+        { h: 'Cliente',        k: function(e) { return e.clienteNombre || ''; } }
+      ];
+
+      var esc = function(v) { return '"' + String(v).replace(/"/g, '""') + '"'; };
+      var header = cols.map(function(c) { return esc(c.h); }).join(',');
+      var rows   = list.map(function(e) {
+        return cols.map(function(c) { return esc(c.k(e)); }).join(',');
+      });
+      var csv = '\uFEFF' + [header].concat(rows).join('\r\n'); // BOM para Excel
+
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var url  = URL.createObjectURL(blob);
+      var a    = document.createElement('a');
+      a.href     = url;
+      a.download = 'expedientes_' + new Date().toISOString().slice(0, 10) + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast('✅ Archivo descargado (' + list.length + ' expedientes)', 'success', 4000);
+    } catch(err) {
+      toast('Error al generar Excel: ' + (err.message || ''), 'error');
+    }
+  }, 30);
+}
+
+// ── Exportar PDF (jsPDF + autoTable) ────────────────────────────────────────
+function exportarPDF() {
+  var list = window._expFilteredList || [];
+  if (!list.length) { toast('No hay datos para exportar', 'warning'); return; }
+
+  var jsPDFLib = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if (!jsPDFLib) {
+    toast('⚠️ Librería PDF no disponible. Verificá tu conexión y recargá la página.', 'error', 6000);
+    return;
+  }
+
+  toast('Generando PDF…', 'info', 4000);
+
+  setTimeout(function() {
+    try {
+      var doc     = new jsPDFLib({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      var pageW   = doc.internal.pageSize.getWidth();
+      var pageH   = doc.internal.pageSize.getHeight();
+      var today   = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      var primary = [30, 58, 95]; // #1e3a5f
+
+      // ── Encabezado ───────────────────────────────────────────────────────
+      doc.setFillColor(primary[0], primary[1], primary[2]);
+      doc.rect(0, 0, pageW, 22, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(15);
+      doc.setTextColor(255, 255, 255);
+      doc.text('ESTUDIO MVC ABOGADOS', 14, 10);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(200, 215, 235);
+      doc.text('Listado de Expedientes', 14, 17);
+
+      doc.setTextColor(200, 215, 235);
+      doc.text('Generado: ' + today + '   |   Total: ' + list.length + ' expediente' + (list.length !== 1 ? 's' : ''), pageW - 14, 17, { align: 'right' });
+
+      // ── Tabla ────────────────────────────────────────────────────────────
+      doc.autoTable({
+        startY: 26,
+        head: [['Carátula', 'Número', 'Estado', 'Fuero', 'Departamento', 'Juzgado', 'Etapa Procesal', 'Fecha Inicio']],
+        body: list.map(function(e) {
+          return [
+            e.caratula       || '—',
+            e.numero         || '—',
+            (e.estado        || '—').toUpperCase(),
+            e.fuero          || '—',
+            e.departamento   || e._sheetName || '—',
+            e.juzgado        || '—',
+            e.etapaProcesal  || e.etapaGAS || '—',
+            e.fechaInicio    || '—'
+          ];
+        }),
+        styles: {
+          fontSize: 7,
+          cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 },
+          overflow: 'linebreak',
+          valign: 'middle'
+        },
+        headStyles: {
+          fillColor: primary,
+          textColor: 255,
+          fontStyle: 'bold',
+          fontSize: 8
+        },
+        alternateRowStyles: { fillColor: [245, 248, 252] },
+        columnStyles: {
+          0: { cellWidth: 72 },  // carátula
+          1: { cellWidth: 24 },  // número
+          2: { cellWidth: 20 },  // estado
+          3: { cellWidth: 22 },  // fuero
+          4: { cellWidth: 30 },  // departamento
+          5: { cellWidth: 28 },  // juzgado
+          6: { cellWidth: 30 },  // etapa
+          7: { cellWidth: 20 }   // fecha
+        },
+        margin: { left: 10, right: 10 }
+      });
+
+      // ── Pie de página con número de página ──────────────────────────────
+      var totalPages = doc.internal.getNumberOfPages();
+      for (var i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(7);
+        doc.setTextColor(160, 160, 160);
+        // línea separadora
+        doc.setDrawColor(200, 200, 200);
+        doc.line(10, pageH - 12, pageW - 10, pageH - 12);
+        // texto izquierda
+        doc.text('Estudio MVC Abogados  ·  ' + today, 10, pageH - 7);
+        // texto centro (número de página)
+        doc.text('Pág. ' + i + ' / ' + totalPages, pageW / 2, pageH - 7, { align: 'center' });
+        // texto derecha
+        doc.text('Confidencial', pageW - 10, pageH - 7, { align: 'right' });
+      }
+
+      doc.save('expedientes_' + new Date().toISOString().slice(0, 10) + '.pdf');
+      toast('✅ PDF descargado (' + list.length + ' expedientes)', 'success', 4000);
+    } catch(err) {
+      toast('Error al generar PDF: ' + (err.message || ''), 'error');
+    }
+  }, 50); // yield para que el toast se renderice antes de bloquear
+}
 
 function renderExpCard(e) {
   var isPro  = Store.isProfesional();
