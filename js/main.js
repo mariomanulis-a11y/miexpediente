@@ -1032,6 +1032,19 @@ async function guardarExpediente(editId) {
     } else {
       const newId = await API.createExpediente(data);
       toast('Expediente creado', 'success');
+      // Agregar al pending_sync para sincronizar el numero al Sheet si la carátula existe
+      if (data.caratula && data.numero) {
+        try {
+          var _ps = JSON.parse(localStorage.getItem('_mvc_pending_sync') || '{}');
+          _ps[newId] = { caratula: data.caratula, numero: data.numero, etapaProcesal: data.etapaProcesal || '', tasks_notes: data.tasks_notes || '', observaciones: data.observaciones || '', juzgado: data.juzgado || '', secretaria: data.secretaria || '', _ts: Date.now() };
+          localStorage.setItem('_mvc_pending_sync', JSON.stringify(_ps));
+        } catch(_) {}
+        API.pushToSheets().then(function(r) {
+          if (!r) return;
+          if (r.updated > 0) toast('✅ Datos enviados al Sheet (' + r.updated + ' exp.)', 'success', 5000);
+          else if (r.notFound && r.notFound.length) toast('ℹ️ Carátula no encontrada en Sheet (se guardó localmente)', 'info', 6000);
+        }).catch(function() {});
+      }
       Router.go('expediente-detalle', { id: newId });
     }
   } catch(e) {

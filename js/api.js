@@ -76,6 +76,7 @@ const API = {
       // Carátula: siempre requerida para el lookup en GAS
       entry.caratula = data.caratula || (Store.getCurrent() && Store.getCurrent().caratula) || entry.caratula || '';
       // Solo sobreescribir campos que realmente vienen en este update
+      if (data.numero        !== undefined) entry.numero        = data.numero;
       if (data.etapaProcesal !== undefined) entry.etapaProcesal = data.etapaProcesal;
       if (data.tasks_notes   !== undefined) entry.tasks_notes   = data.tasks_notes;
       if (data.observaciones !== undefined) entry.observaciones = data.observaciones;
@@ -284,7 +285,7 @@ const API = {
         var localPending = pendingSync[docId];
         if (localPending) {
           // Campos que el admin editó en la app NO se sobreescriben con el Sheet
-          var mergeFields = ['etapaProcesal', 'tasks_notes', 'observaciones', 'juzgado', 'secretaria'];
+          var mergeFields = ['numero', 'etapaProcesal', 'tasks_notes', 'observaciones', 'juzgado', 'secretaria'];
           mergeFields.forEach(function(field) {
             if (localPending[field] !== undefined && localPending[field] !== '') {
               payload[field] = localPending[field];
