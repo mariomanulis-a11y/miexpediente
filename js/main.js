@@ -385,16 +385,16 @@ Router.register('expedientes', async function(container) {
     // ── Filtros dinámicos ──
     '<div id="exp-filters" style="display:flex;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem;align-items:flex-start">' +
 
-    // Estado (chips fijos)
+    // Estado (desplegable)
     '<div>' +
     '<div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:5px">Estado</div>' +
-    '<div class="filter-chips" id="chips-estado">' +
-    '<span class="chip active" data-s="">Todos</span>' +
-    '<span class="chip" data-s="activo">Activo</span>' +
-    '<span class="chip" data-s="urgente">Urgente</span>' +
-    '<span class="chip" data-s="suspendido">Suspendido</span>' +
-    '<span class="chip" data-s="archivado">Archivado</span>' +
-    '</div></div>' +
+    '<select id="filter-estado" class="form-select" style="min-width:155px;font-size:.82rem" onchange="_expFilter()">' +
+    '<option value="">Todos</option>' +
+    '<option value="activo">Activo</option>' +
+    '<option value="urgente">Urgente</option>' +
+    '<option value="suspendido">Suspendido</option>' +
+    '<option value="archivado">Archivado</option>' +
+    '</select></div>' +
 
     // Fuero (se puebla dinámicamente)
     '<div>' +
@@ -427,14 +427,6 @@ Router.register('expedientes', async function(container) {
     '<div id="exp-count" style="font-size:.8rem;color:var(--text-muted);margin-bottom:.75rem"></div>' +
     '<div id="exp-list"><div class="spinner"></div></div>';
 
-  // Chips de estado
-  document.getElementById('chips-estado').addEventListener('click', function(ev) {
-    if (ev.target.dataset.s === undefined) return;
-    document.querySelectorAll('#chips-estado .chip').forEach(function(c) { c.classList.remove('active'); });
-    ev.target.classList.add('active');
-    window._expPage = 0;
-    _expFilter();
-  });
 
   let allExps = [];
   var PAGE_SIZE = 20;
@@ -472,7 +464,7 @@ Router.register('expedientes', async function(container) {
 
   window._expFilter = function() {
     var q     = (document.getElementById('search-input').value || '').toLowerCase().trim();
-    var s     = (document.querySelector('#chips-estado .chip.active') || {}).dataset.s || '';
+    var s     = (document.getElementById('filter-estado') || {}).value || '';
     var fuero = (document.getElementById('filter-fuero') || {}).value || '';
     var dept  = (document.getElementById('filter-dept')  || {}).value || '';
     var etapa = (document.getElementById('filter-etapa') || {}).value || '';
@@ -527,8 +519,7 @@ Router.register('expedientes', async function(container) {
     document.getElementById('filter-fuero').value = '';
     document.getElementById('filter-dept').value  = '';
     document.getElementById('filter-etapa').value = '';
-    document.querySelectorAll('#chips-estado .chip').forEach(function(c) { c.classList.remove('active'); });
-    document.querySelector('#chips-estado .chip').classList.add('active');
+    document.getElementById('filter-estado').value = '';
     window._expPage = 0;
     _expFilter();
   };
