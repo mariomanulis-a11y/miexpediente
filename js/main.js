@@ -1165,6 +1165,18 @@ async function guardarExpediente(editId) {
       // Auto-push al Sheet en background (sin bloquear la navegación)
       API.pushToSheets().then(function(r) {
         if (!r) return;
+        // Actualizar badge y visibilidad del botón push
+        var pushBtn = document.getElementById('push-btn');
+        var remaining = API.getPendingSyncCount();
+        if (pushBtn) {
+          if (remaining > 0) {
+            pushBtn.style.display = '';
+            var badge = document.getElementById('push-badge');
+            if (badge) badge.textContent = remaining;
+          } else {
+            pushBtn.style.display = 'none';
+          }
+        }
         if (r.updated > 0) {
           var msg = '✅ Guardado en Sheet (' + r.updated + ' exp.)';
           if (r.notFound && r.notFound.length) msg += ' — ' + r.notFound.length + ' no encontrado/s en Sheet';

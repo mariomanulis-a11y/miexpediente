@@ -103,8 +103,10 @@ const API = {
     });
   },
   async getClientes() {
-    const snap = await db.collection('usuarios').where('rol', '==', 'cliente').orderBy('nombre').get();
-    return snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    // Sin orderBy para evitar requerir índice compuesto en Firestore
+    const snap = await db.collection('usuarios').where('rol', '==', 'cliente').get();
+    return snap.docs.map(d => Object.assign({ id: d.id }, d.data()))
+      .sort(function(a, b) { return (a.nombre || '').localeCompare(b.nombre || '', 'es'); });
   },
   async getUsuario(uid) {
     const snap = await db.collection('usuarios').doc(uid).get();
@@ -298,11 +300,14 @@ const API = {
         upserted++;
         batchOps++;
       } else {
-        payload.etapaProcesal  = c.etapa || '';
+        payload.etapaProcesal   = c.etapa || '';
         var newRef = col.doc();
-        payload.createdAt      = Utils.serverTimestamp();
+        payload.createdAt       = Utils.serverTimestamp();
         payload.actualizaciones = [];
-        payload.estado         = 'activo';
+        payload.estado          = 'activo';
+        // Asignar al profesional logueado para que sea visible en la app
+        var _u = Store.getUser();
+        if (_u && _u.uid) payload.profesionalId = _u.uid;
         batch.set(newRef, payload);
         created++;
         batchOps++;

@@ -17,7 +17,8 @@ const WA = {
     return 'https://wa.me/' + numero + '?text=' + msg;
   },
   linkExpediente(numero, caratula, etapa, expId) {
-    var url = location.origin + location.pathname + '#/expediente-detalle/' + (expId || '');
+    var base = location.origin + location.pathname.replace(/\/[^/]*$/, '/');
+    var url  = base + '#/expediente-detalle?id=' + (expId || '');
     var msg = encodeURIComponent(
       '\u00a1Hola! Te damos la bienvenida a MVC Abogados. \u2696\ufe0f\n' +
       'Para seguir el avance de tu causa ' + caratula + ' en tiempo real, ingres\u00e1 aqu\u00ed: ' + url + '\n' +
